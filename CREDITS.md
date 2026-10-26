@@ -21,6 +21,7 @@ match, with a normal chest.
    margin is only seen if you collimate wider than the original film.
 4. In the browser, every image you make is the real film:
    - cropped to your light field;
+   - for a left lateral, flipped horizontally so the patient faces the viewer's right;
    - magnified for SID and for AP / right-lateral set-ups;
    - warped for expiration;
    - overlaid with **simulated** scapulae, arms, jaw, necklace, bra hooks / underwire and hair;

@@ -359,16 +359,24 @@ window.SCG_ROOM3D = function(THREE, host){
     var neck = limb(new V3(0, 1.43, -0.012), new V3(0, 1.535, 0.0), 0.05, M.skin); body.add(neck);
   })();
   var POSE = null;
-  function arm(sh, el, wr, hdir, side){
+  /* back (optional): the way the BACK of the hand faces; the hand is then rolled so its palm faces away from it.
+     Hand local frame: +x along the fingers, +y = back of the hand, thumb on +z (tz = -1 puts it on -z). */
+  function arm(sh, el, wr, hdir, side, back, tz){
     limbs.add(taper(sh, el, 0.046, 0.036, M.skin));
     limbs.add(taper(sh, sh.clone().lerp(el, 0.38), 0.058, 0.05, M.gown));          // sleeve
     var cap = ellipsoid(0.066, 0.06, 0.064, M.gown, 28); cap.position.copy(sh).add(new V3(side*0.004, 0.012, 0)); limbs.add(cap);
     limbs.add(taper(el, wr, 0.036, 0.025, M.skin));
     var j = ellipsoid(0.037, 0.035, 0.037, M.skin, 20); j.position.copy(el); limbs.add(j);
-    var hand = new THREE.Group(); hand.position.copy(wr); hand.quaternion.setFromUnitVectors(new V3(1, 0, 0), hdir.clone().normalize()); limbs.add(hand);
+    var hand = new THREE.Group(); hand.position.copy(wr); limbs.add(hand);
+    var hx = hdir.clone().normalize();
+    if(back){
+      var hy = back.clone().addScaledVector(hx, -back.dot(hx)).normalize(), hz = new V3().crossVectors(hx, hy);
+      hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(hx, hy, hz));
+    } else hand.quaternion.setFromUnitVectors(new V3(1, 0, 0), hx);
+    tz = tz || 1;
     var palm = ellipsoid(0.048, 0.016, 0.038, M.skin, 24); palm.position.x = 0.046; hand.add(palm);
     var fing = ellipsoid(0.046, 0.012, 0.034, M.skin, 24); fing.position.set(0.108, -0.004, 0); fing.rotation.z = -0.35; hand.add(fing);
-    hand.add(taper(new V3(0.014, 0, 0.03), new V3(0.07, -0.006, 0.05), 0.012, 0.009, M.skin));
+    hand.add(taper(new V3(0.014, 0, 0.03*tz), new V3(0.07, -0.006, 0.05*tz), 0.012, 0.009, M.skin));
   }
   function buildPose(p){
     if(limbs){ body.remove(limbs); limbs.traverse(function(c){ if(c.isMesh && c.geometry !== HEAD_GEO) c.geometry.dispose(); }); }
@@ -376,7 +384,8 @@ window.SCG_ROOM3D = function(THREE, host){
     [-1, 1].forEach(function(s){
       var sh = new V3(s*0.185, 1.385, -0.008);
       if(p.arms === "hips"){        // backs of the hands on the hips, elbows forward -> scapulae rotated out
-        arm(sh, new V3(s*0.29, 1.16, 0.115), new V3(s*0.185, 0.985, -0.045), new V3(-s*0.25, -0.35, -0.9), s);
+        // fingers point back and down over the iliac crest, back of the hand against the hip (palm faces out)
+        arm(sh, new V3(s*0.29, 1.16, 0.115), new V3(s*0.172, 1.0, -0.01), new V3(-s*0.08, -0.84, -0.53), s, new V3(-s, 0, 0.1), s);
       } else if(p.arms === "up"){   // raised, forearms resting on the head
         arm(sh, new V3(s*0.15, 1.69, 0.045), new V3(-s*0.07, 1.79, 0.055), new V3(-s*1, 0.15, 0), s);
       } else {                      // hanging by the side
@@ -494,6 +503,7 @@ window.SCG_ROOM3D = function(THREE, host){
       else { YAW = 1.12; PITCH = 0.17; DIST = 4.3; TGT.set(0, 1.2, -0.15); }
       setCam(); kick();
     },
+    orbit:function(yaw, pitch, dist, t){ YAW = yaw; PITCH = pitch; DIST = dist; TGT.set(t[0], t[1], t[2]); setCam(); kick(); },   // debug
     start:function(){ running = true; resize(); kick(); },
     stop:function(){ running = false; if(raf){ cancelAnimationFrame(raf); raf = 0; } },
     snap:function(w, h){

@@ -1020,16 +1020,24 @@ window.SCG_ROOM3D = function(THREE, host){
     var neck = limb(new V3(0, 1.43, -0.012), new V3(0, 1.535, 0.0), 0.05, M.skin); body.add(neck);
   })();
   var POSE = null;
-  function arm(sh, el, wr, hdir, side){
+  /* back (optional): the way the BACK of the hand faces; the hand is then rolled so its palm faces away from it.
+     Hand local frame: +x along the fingers, +y = back of the hand, thumb on +z (tz = -1 puts it on -z). */
+  function arm(sh, el, wr, hdir, side, back, tz){
     limbs.add(taper(sh, el, 0.046, 0.036, M.skin));
     limbs.add(taper(sh, sh.clone().lerp(el, 0.38), 0.058, 0.05, M.gown));          // sleeve
     var cap = ellipsoid(0.066, 0.06, 0.064, M.gown, 28); cap.position.copy(sh).add(new V3(side*0.004, 0.012, 0)); limbs.add(cap);
     limbs.add(taper(el, wr, 0.036, 0.025, M.skin));
     var j = ellipsoid(0.037, 0.035, 0.037, M.skin, 20); j.position.copy(el); limbs.add(j);
-    var hand = new THREE.Group(); hand.position.copy(wr); hand.quaternion.setFromUnitVectors(new V3(1, 0, 0), hdir.clone().normalize()); limbs.add(hand);
+    var hand = new THREE.Group(); hand.position.copy(wr); limbs.add(hand);
+    var hx = hdir.clone().normalize();
+    if(back){
+      var hy = back.clone().addScaledVector(hx, -back.dot(hx)).normalize(), hz = new V3().crossVectors(hx, hy);
+      hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(hx, hy, hz));
+    } else hand.quaternion.setFromUnitVectors(new V3(1, 0, 0), hx);
+    tz = tz || 1;
     var palm = ellipsoid(0.048, 0.016, 0.038, M.skin, 24); palm.position.x = 0.046; hand.add(palm);
     var fing = ellipsoid(0.046, 0.012, 0.034, M.skin, 24); fing.position.set(0.108, -0.004, 0); fing.rotation.z = -0.35; hand.add(fing);
-    hand.add(taper(new V3(0.014, 0, 0.03), new V3(0.07, -0.006, 0.05), 0.012, 0.009, M.skin));
+    hand.add(taper(new V3(0.014, 0, 0.03*tz), new V3(0.07, -0.006, 0.05*tz), 0.012, 0.009, M.skin));
   }
   function buildPose(p){
     if(limbs){ body.remove(limbs); limbs.traverse(function(c){ if(c.isMesh && c.geometry !== HEAD_GEO) c.geometry.dispose(); }); }
@@ -1037,7 +1045,8 @@ window.SCG_ROOM3D = function(THREE, host){
     [-1, 1].forEach(function(s){
       var sh = new V3(s*0.185, 1.385, -0.008);
       if(p.arms === "hips"){        // backs of the hands on the hips, elbows forward -> scapulae rotated out
-        arm(sh, new V3(s*0.29, 1.16, 0.115), new V3(s*0.185, 0.985, -0.045), new V3(-s*0.25, -0.35, -0.9), s);
+        // fingers point back and down over the iliac crest, back of the hand against the hip (palm faces out)
+        arm(sh, new V3(s*0.29, 1.16, 0.115), new V3(s*0.172, 1.0, -0.01), new V3(-s*0.08, -0.84, -0.53), s, new V3(-s, 0, 0.1), s);
       } else if(p.arms === "up"){   // raised, forearms resting on the head
         arm(sh, new V3(s*0.15, 1.69, 0.045), new V3(-s*0.07, 1.79, 0.055), new V3(-s*1, 0.15, 0), s);
       } else {                      // hanging by the side
@@ -1155,6 +1164,7 @@ window.SCG_ROOM3D = function(THREE, host){
       else { YAW = 1.12; PITCH = 0.17; DIST = 4.3; TGT.set(0, 1.2, -0.15); }
       setCam(); kick();
     },
+    orbit:function(yaw, pitch, dist, t){ YAW = yaw; PITCH = pitch; DIST = dist; TGT.set(t[0], t[1], t[2]); setCam(); kick(); },   // debug
     start:function(){ running = true; resize(); kick(); },
     stop:function(){ running = false; if(raf){ cancelAnimationFrame(raf); raf = 0; } },
     snap:function(w, h){
@@ -1193,7 +1203,7 @@ var stage=$("scgStage"), vp=$("scgViewport"), room=$("scgRoom"), lf=$("xrLF"), s
 $("scgMarkMini").innerHTML = '<img class="scg-mark-ic" src="'+url("logo_mark")+'" alt="Rad-Lad">'+
   '<div class="scg-mark-tx"><b>X&nbsp;MARKS&nbsp;THE&nbsp;SPOT&nbsp;·&nbsp;CHEST&nbsp;X-RAY</b><span>Rad-Lad&nbsp;·&nbsp;Illuminate&nbsp;the&nbsp;Invisible</span></div>';
 $("scgLogoBig").src = url("logo_full"); $("scgAchLogo").src = url("logo_mark");
-$("scgT1").src = url("pa_t"); $("scgT2").src = url("lat_t");
+$("scgT1").src = url("pa_t"); $("scgT2").src = url("lat_t"); $("scgT2").style.transform = "scaleX(-1)";   // left lateral faces right
 function playAchievement(){ achWrap.classList.remove("is-playing"); void achWrap.offsetWidth; achWrap.classList.add("is-playing"); }
 $("scgAchReplay").addEventListener("click", playAchievement);
 
@@ -1821,9 +1831,14 @@ function renderShot(p, sh){
   var D=img.data;
   for(var z=0;z<out.length;z++){ var c=Math.max(0, Math.min(255, out[z])); D[z*4]=D[z*4+1]=D[z*4+2]=c; D[z*4+3]=255; }
   g.putImageData(img, 0, 0);
-  // the lead marker (on the detector: no magnification)
+  // a left lateral is displayed facing the other way (anterior to the viewer's right); built in film mm, flipped here
+  var flipX = p==="lat" && set.side!=="R";
+  if(flipX){ var tc=document.createElement("canvas"); tc.width=W; tc.height=H; tc.getContext("2d").drawImage(cv, 0, 0);
+    g.setTransform(-1, 0, 0, 1, W, 0); g.drawImage(tc, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0); }
+  // the lead marker (on the detector: no magnification); drawn after the flip so the letter reads normally
   if(sh.marker){
     var m=sh.marker, mx=(m.x-(f.cx-f.w/2))*k, my=(m.y-(f.cy-f.h/2))*k;
+    if(flipX) mx=W-mx;
     if(mx>-20 && my>-20 && mx<W+20 && my<H+20){
       g.fillStyle="rgba(200,200,200,.35)"; g.fillRect(mx-9*k, my-9*k, 18*k, 18*k);
       g.fillStyle="#fff"; g.font="bold "+(14*k)+"px Arial, sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(m.l, mx, my+0.5*k);
@@ -1936,7 +1951,7 @@ function showResult(){
     '<a href="https://commons.wikimedia.org/wiki/File:Normal_lateral_chest_radiograph_(X-ray).jpg" target="_blank" rel="noopener">lateral</a>, released under '+
     '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0</a> (a normal chest of a 21-year-old woman after a football collision). '+
     '<b>Changes made:</b> converted to greyscale and resized (pixel spacing estimated at 0.25 mm); the burnt-in “Dx” / “Sin” labels on the PA were removed by inpainting; each film was extended by 8 cm with a blurred synthetic margin, seen only if you collimate wider than the original film; '+
-    'in your browser the films are cropped to your field, magnified for SID and AP / right-lateral set-ups, warped for expiration, and given simulated scapulae, arms, jaw, necklace, bra hooks, hair, breathing blur, noise / contrast for your exposure and your lead marker — none of these is a real finding. '+
+    'in your browser the films are cropped to your field, the left lateral is flipped horizontally for display, magnified for SID and AP / right-lateral set-ups, warped for expiration, and given simulated scapulae, arms, jaw, necklace, bra hooks, hair, breathing blur, noise / contrast for your exposure and your lead marker — none of these is a real finding. '+
     'Exposure, DI and DAP use a simplified teaching model. The 3-D room is generic. Educational simulation — not a medical device, not for clinical use.</div>';
   resultEl.innerHTML = h; resultEl.classList.remove("scg-hidden");
   ["pa", "lat"].forEach(function(p){

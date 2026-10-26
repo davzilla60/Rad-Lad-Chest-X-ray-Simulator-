@@ -657,7 +657,7 @@
 </div>
 
 <script src="assets/calib.js"></script>
-<script src="room3d.js?v=1"></script>
+<script src="room3d.js?v=2"></script>
 <script>
 (function(){
 "use strict";
@@ -685,7 +685,7 @@ var stage=$("scgStage"), vp=$("scgViewport"), room=$("scgRoom"), lf=$("xrLF"), s
 $("scgMarkMini").innerHTML = '<img class="scg-mark-ic" src="'+url("logo_mark")+'" alt="Rad-Lad">'+
   '<div class="scg-mark-tx"><b>X&nbsp;MARKS&nbsp;THE&nbsp;SPOT&nbsp;·&nbsp;CHEST&nbsp;X-RAY</b><span>Rad-Lad&nbsp;·&nbsp;Illuminate&nbsp;the&nbsp;Invisible</span></div>';
 $("scgLogoBig").src = url("logo_full"); $("scgAchLogo").src = url("logo_mark");
-$("scgT1").src = url("pa_t"); $("scgT2").src = url("lat_t");
+$("scgT1").src = url("pa_t"); $("scgT2").src = url("lat_t"); $("scgT2").style.transform = "scaleX(-1)";   // left lateral faces right
 function playAchievement(){ achWrap.classList.remove("is-playing"); void achWrap.offsetWidth; achWrap.classList.add("is-playing"); }
 $("scgAchReplay").addEventListener("click", playAchievement);
 
@@ -1313,9 +1313,14 @@ function renderShot(p, sh){
   var D=img.data;
   for(var z=0;z<out.length;z++){ var c=Math.max(0, Math.min(255, out[z])); D[z*4]=D[z*4+1]=D[z*4+2]=c; D[z*4+3]=255; }
   g.putImageData(img, 0, 0);
-  // the lead marker (on the detector: no magnification)
+  // a left lateral is displayed facing the other way (anterior to the viewer's right); built in film mm, flipped here
+  var flipX = p==="lat" && set.side!=="R";
+  if(flipX){ var tc=document.createElement("canvas"); tc.width=W; tc.height=H; tc.getContext("2d").drawImage(cv, 0, 0);
+    g.setTransform(-1, 0, 0, 1, W, 0); g.drawImage(tc, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0); }
+  // the lead marker (on the detector: no magnification); drawn after the flip so the letter reads normally
   if(sh.marker){
     var m=sh.marker, mx=(m.x-(f.cx-f.w/2))*k, my=(m.y-(f.cy-f.h/2))*k;
+    if(flipX) mx=W-mx;
     if(mx>-20 && my>-20 && mx<W+20 && my<H+20){
       g.fillStyle="rgba(200,200,200,.35)"; g.fillRect(mx-9*k, my-9*k, 18*k, 18*k);
       g.fillStyle="#fff"; g.font="bold "+(14*k)+"px Arial, sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(m.l, mx, my+0.5*k);
@@ -1428,7 +1433,7 @@ function showResult(){
     '<a href="https://commons.wikimedia.org/wiki/File:Normal_lateral_chest_radiograph_(X-ray).jpg" target="_blank" rel="noopener">lateral</a>, released under '+
     '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0</a> (a normal chest of a 21-year-old woman after a football collision). '+
     '<b>Changes made:</b> converted to greyscale and resized (pixel spacing estimated at 0.25 mm); the burnt-in “Dx” / “Sin” labels on the PA were removed by inpainting; each film was extended by 8 cm with a blurred synthetic margin, seen only if you collimate wider than the original film; '+
-    'in your browser the films are cropped to your field, magnified for SID and AP / right-lateral set-ups, warped for expiration, and given simulated scapulae, arms, jaw, necklace, bra hooks, hair, breathing blur, noise / contrast for your exposure and your lead marker — none of these is a real finding. '+
+    'in your browser the films are cropped to your field, the left lateral is flipped horizontally for display, magnified for SID and AP / right-lateral set-ups, warped for expiration, and given simulated scapulae, arms, jaw, necklace, bra hooks, hair, breathing blur, noise / contrast for your exposure and your lead marker — none of these is a real finding. '+
     'Exposure, DI and DAP use a simplified teaching model. The 3-D room is generic. Educational simulation — not a medical device, not for clinical use.</div>';
   resultEl.innerHTML = h; resultEl.classList.remove("scg-hidden");
   ["pa", "lat"].forEach(function(p){
