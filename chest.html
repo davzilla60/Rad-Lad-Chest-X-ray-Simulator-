@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X Marks the Spot — Chest X-ray Simulator</title>
+<style>
+/* ============ MR-I READY (Scanogram engine) — scoped styles ============ */
+#scg-root *{box-sizing:border-box;margin:0;padding:0}
+#scg-root{
+  --bg:#0c0e0b;
+  --panel:#14180f;
+  --panel-2:#1b2015;
+  --line:#2c3a22;
+  --line-soft:#22301b;
+  --ink:#dfe7d6;
+  --ink-dim:#8ba07d;
+  --ink-faint:#5d6f52;
+  --accent:#5fe08a;
+  --accent-2:#8fbf6b;
+  --accent-ink:#0c1a0f;
+  --warn:#e8b45f;
+  --bad:#e06c5f;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --sans:"Trebuchet MS","Segoe UI",system-ui,-apple-system,sans-serif;
+  position:relative;
+  width:100%;
+  max-width:1040px;
+  box-sizing:border-box;
+  margin:0 auto;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:14px;
+  line-height:1.45;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+#scg-root button{font-family:var(--mono);cursor:pointer}
+#scg-root .scg-hidden{display:none!important}
+
+/* ---- top bar ---- */
+#scg-root .scg-topbar{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 14px;
+  background:linear-gradient(180deg,#171c12,#11150d);
+  border-bottom:1px solid var(--line);
+}
+#scg-root .scg-mark{display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden}
+#scg-root .scg-mark .scg-mark-ic{flex:none;height:26px;width:auto;display:block;background:#d3d5d3;border-radius:5px;padding:3px 5px}
+#scg-root .scg-mark-tx{display:flex;flex-direction:column;line-height:1.05;min-width:0}
+#scg-root .scg-mark-tx b{font-family:var(--sans);font-weight:700;letter-spacing:.14em;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#scg-root .scg-mark-tx span{font-size:10px;letter-spacing:.22em;color:var(--ink-faint);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#scg-root .scg-topbar .scg-spacer{flex:1}
+#scg-root .scg-phasechip{
+  font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  padding:5px 10px;border:1px solid var(--line);border-radius:999px;
+  color:var(--accent);background:#101609;white-space:nowrap;
+}
+#scg-root .scg-phasechip::before{content:"● ";color:var(--accent);font-size:8px;vertical-align:2px}
+
+/* ---- main grid ---- */
+#scg-root .scg-body{display:grid;grid-template-columns:1fr 320px;gap:0}
+#scg-root .scg-stage{position:relative;background:#000;border-right:1px solid var(--line)}
+#scg-root .scg-viewport{
+  position:relative;width:100%;aspect-ratio:1/1;max-height:min(70vh,600px);background:#000;
+  overflow:hidden;user-select:none;touch-action:none;
+}
+#scg-root .scg-img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:contain;object-position:center;
+  image-rendering:auto;transition:opacity .35s ease;
+}
+#scg-root #scgImgB{opacity:0}
+
+/* reticle */
+#scg-root .scg-reticle{position:absolute;inset:0;pointer-events:none;color:#7bd39a;opacity:.5;mix-blend-mode:screen}
+#scg-root .scg-reticle line{stroke:currentColor;stroke-width:1;stroke-dasharray:3 6}
+#scg-root .scg-reticle path{stroke:currentColor;stroke-width:1.4;fill:none}
+
+/* sweep line */
+#scg-root .scg-sweep{
+  position:absolute;left:0;right:0;height:2px;top:0;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  box-shadow:0 0 16px 3px rgba(95,224,138,.55);
+  opacity:0;
+}
+#scg-root .scg-stage.is-scan .scg-sweep{opacity:1;animation:scg-sweepmove 2.2s linear}
+@keyframes scg-sweepmove{from{top:0}to{top:100%}}
+#scg-root .scg-stage.is-scan .scg-img{clip-path:inset(0 0 100% 0);animation:scg-reveal 2.2s linear forwards}
+@keyframes scg-reveal{to{clip-path:inset(0 0 0 0)}}
+
+/* acquisition noise band */
+#scg-root .scg-acq{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;
+  background:repeating-linear-gradient(0deg,#050805 0 2px,#0b0f0a 2px 4px);
+}
+#scg-root .scg-acq .scg-acq-band{
+  position:absolute;left:0;right:0;height:22%;
+  background:linear-gradient(180deg,transparent,rgba(95,224,138,.16),rgba(95,224,138,.32),rgba(95,224,138,.16),transparent);
+  border-top:1px solid rgba(95,224,138,.5);border-bottom:1px solid rgba(95,224,138,.5);
+  animation:scg-acqband 1.05s linear infinite;
+}
+@keyframes scg-acqband{from{top:-24%}to{top:102%}}
+#scg-root .scg-acq h4{font-family:var(--sans);letter-spacing:.34em;font-size:15px;color:var(--accent);z-index:2;text-align:center}
+#scg-root .scg-acq .scg-acq-num{font-size:12px;color:var(--ink-dim);letter-spacing:.12em;z-index:2;text-align:center;padding:0 12px}
+#scg-root .scg-acq .scg-acq-big{font-family:var(--sans);font-size:44px;color:var(--ink);z-index:2;letter-spacing:.06em}
+
+/* viewport overlays */
+#scg-root .scg-vp-tl,#scg-root .scg-vp-bl,#scg-root .scg-vp-br{
+  position:absolute;font-size:10.5px;letter-spacing:.08em;color:#9fe7b8;
+  text-shadow:0 0 6px rgba(0,0,0,.9);pointer-events:none;white-space:pre;line-height:1.5;z-index:8;
+}
+#scg-root .scg-vp-tl{top:9px;left:11px}
+#scg-root .scg-vp-bl{bottom:9px;left:11px;color:var(--ink-dim)}
+#scg-root .scg-vp-br{bottom:9px;right:11px;color:var(--ink-dim);text-align:right}
+
+/* lateral scanogram picture-in-picture */
+#scg-root .scg-pip{
+  position:absolute;top:12px;right:12px;width:30%;max-width:150px;
+  border:1px solid var(--line);background:#000;overflow:hidden;z-index:7;
+  box-shadow:0 2px 12px rgba(0,0,0,.6);
+}
+#scg-root .scg-pip img{display:block;width:100%;height:auto;opacity:.92}
+#scg-root .scg-pip .scg-pip-line{
+  position:absolute;left:0;right:0;height:0;border-top:1.5px solid var(--warn);
+  box-shadow:0 0 6px rgba(232,180,95,.5);
+}
+#scg-root .scg-pip.is-on .scg-pip-line{border-top-color:var(--accent)}
+#scg-root .scg-pip span{
+  position:absolute;left:4px;top:3px;font-size:9px;letter-spacing:.14em;color:var(--ink-dim);
+  text-shadow:0 0 4px #000;
+}
+
+/* watermark */
+#scg-root .scg-watermark{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;z-index:7;
+}
+#scg-root .scg-watermark b{
+  font-family:var(--sans);font-weight:700;letter-spacing:.22em;font-size:clamp(14px,3vw,22px);
+  color:rgba(224,108,95,.9);border:2px solid rgba(224,108,95,.65);
+  padding:8px 18px;transform:rotate(-14deg);text-align:center;
+  background:rgba(10,4,4,.28);
+}
+
+/* ---- right rail ---- */
+#scg-root .scg-rail{display:flex;flex-direction:column;background:var(--panel);min-width:0}
+#scg-root .scg-rail-head{padding:11px 14px 9px;border-bottom:1px solid var(--line)}
+#scg-root .scg-rail-head h3{font-family:var(--sans);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink)}
+#scg-root .scg-rail-head p{font-size:10.5px;color:var(--ink-faint);letter-spacing:.06em;margin-top:2px}
+#scg-root .scg-rail-body{padding:12px 14px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex:1}
+
+#scg-root .scg-readout{border:1px solid var(--line-soft);border-radius:7px;background:var(--panel-2);padding:10px 11px}
+#scg-root .scg-readout .scg-ro-lab{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
+#scg-root .scg-readout .scg-ro-val{font-size:26px;font-weight:600;color:var(--accent);letter-spacing:.02em;line-height:1.15}
+#scg-root .scg-readout .scg-ro-val small{font-size:12px;color:var(--ink-dim);font-weight:400}
+#scg-root .scg-readout.is-warn .scg-ro-val{color:var(--warn)}
+
+#scg-root .scg-kv{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;border-bottom:1px dotted var(--line-soft)}
+#scg-root .scg-kv:last-child{border-bottom:0}
+#scg-root .scg-kv span:first-child{color:var(--ink-faint);letter-spacing:.08em}
+#scg-root .scg-kv span:last-child{color:var(--ink);text-align:right}
+#scg-root .scg-kv b{color:var(--accent)}
+
+#scg-root .scg-tdc{width:100%;height:110px;display:block;background:#0a0d08;border:1px solid var(--line-soft);border-radius:6px}
+
+#scg-root .scg-hint{font-size:11px;color:var(--ink-dim);letter-spacing:.03em}
+#scg-root .scg-hint.is-ok{color:var(--accent)}
+#scg-root .scg-hint.is-warn{color:var(--warn)}
+
+#scg-root .scg-size{display:flex;align-items:center;gap:8px}
+#scg-root .scg-size input[type=range]{flex:1;accent-color:var(--accent)}
+#scg-root .scg-size output{font-size:12px;color:var(--accent);min-width:52px;text-align:right}
+
+/* checklist (patient setup) */
+#scg-root .scg-check{display:flex;flex-direction:column;gap:6px}
+#scg-root .scg-check div{display:flex;gap:8px;font-size:11px;color:var(--ink-faint);line-height:1.35;transition:color .3s}
+#scg-root .scg-check div i{font-style:normal;flex:none;width:14px;color:var(--line)}
+#scg-root .scg-check div.is-done{color:var(--ink)}
+#scg-root .scg-check div.is-done i{color:var(--accent)}
+
+/* method chooser */
+#scg-root .scg-choice{display:flex;flex-direction:column;gap:8px}
+#scg-root .scg-choice button{
+  text-align:left;padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);color:var(--ink);
+  font-size:12px;letter-spacing:.05em;transition:border-color .15s,background .15s;
+}
+#scg-root .scg-choice button b{display:block;color:var(--accent);font-size:12.5px;letter-spacing:.1em;margin-bottom:3px}
+#scg-root .scg-choice button span{color:var(--ink-dim);font-size:10.5px;line-height:1.4;display:block}
+#scg-root .scg-choice button:hover{border-color:var(--accent);background:#10200f}
+
+/* command buttons */
+#scg-root .scg-cmds{display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-top:1px solid var(--line)}
+#scg-root .scg-btn{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:8px 11px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel-2);color:var(--ink);font-size:12px;letter-spacing:.06em;
+  text-align:left;transition:border-color .15s,background .15s,color .15s;
+}
+#scg-root .scg-btn .scg-key{
+  font-size:9.5px;color:var(--ink-faint);border:1px solid var(--line);border-radius:3px;
+  padding:1px 4px;margin-left:auto;letter-spacing:.05em;
+}
+#scg-root .scg-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+#scg-root .scg-btn.is-primary{border-color:var(--accent);color:var(--accent);background:#10200f}
+#scg-root .scg-btn.is-primary:hover:not(:disabled){background:var(--accent);color:var(--accent-ink)}
+#scg-root .scg-btn.is-pulse{animation:scg-btnpulse 1.3s ease-in-out infinite}
+@keyframes scg-btnpulse{0%,100%{box-shadow:0 0 0 0 rgba(95,224,138,.0)}50%{box-shadow:0 0 0 3px rgba(95,224,138,.25)}}
+#scg-root .scg-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* command input */
+#scg-root .scg-cli{display:flex;align-items:center;gap:7px;padding:9px 14px;border-top:1px solid var(--line);background:#0a0d07}
+#scg-root .scg-cli::before{content:"scanogram $";color:var(--accent);font-size:11px;letter-spacing:.05em;flex:none}
+#scg-root .scg-cli input{
+  flex:1;background:transparent;border:0;outline:0;color:var(--ink);
+  font-family:var(--mono);font-size:12px;letter-spacing:.04em;min-width:0;
+}
+#scg-root .scg-cli input::placeholder{color:var(--ink-faint)}
+
+/* console log */
+#scg-root .scg-log{
+  height:104px;overflow-y:auto;padding:8px 14px;background:#080b06;
+  border-top:1px solid var(--line);font-size:11px;line-height:1.6;color:var(--ink-dim);
+  grid-column:1/-1;
+}
+#scg-root .scg-log .scg-l-cmd{color:var(--accent)}
+#scg-root .scg-log .scg-l-ok{color:var(--accent-2)}
+#scg-root .scg-log .scg-l-warn{color:var(--warn)}
+#scg-root .scg-log .scg-l-bad{color:var(--bad)}
+#scg-root .scg-log .scg-l-sys{color:var(--ink-faint)}
+
+/* ---- title screen ---- */
+#scg-root .scg-title{
+  position:absolute;inset:0;z-index:20;background:
+    radial-gradient(120% 80% at 50% 0%,#18201300,#0b0e08 70%),
+    linear-gradient(180deg,#10140c,#0a0d07);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:32px 24px;gap:6px;overflow-y:auto;
+}
+#scg-root .scg-title .scg-logo-plate{
+  background:#d3d5d3;border-radius:12px;padding:14px 26px 10px;margin-bottom:16px;
+  box-shadow:0 2px 24px rgba(0,0,0,.35);
+}
+#scg-root .scg-title .scg-logo-plate img{display:block;width:clamp(180px,42vw,264px);height:auto}
+#scg-root .scg-title h1{
+  font-family:var(--sans);font-weight:700;letter-spacing:.16em;
+  font-size:clamp(26px,5vw,40px);color:var(--ink);
+}
+#scg-root .scg-title h1 .scg-the{display:block;font-size:.4em;letter-spacing:.5em;color:var(--accent);margin-bottom:.35em}
+#scg-root .scg-title .scg-sub{font-size:12.5px;letter-spacing:.14em;color:var(--ink-dim);max-width:46ch}
+#scg-root .scg-title .scg-start{
+  margin-top:22px;padding:12px 26px;border:1px solid var(--accent);border-radius:7px;
+  background:#10200f;color:var(--accent);font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+  transition:background .16s,color .16s;
+}
+#scg-root .scg-title .scg-start:hover{background:var(--accent);color:var(--accent-ink)}
+#scg-root .scg-title .scg-fine{margin-top:16px;font-size:10px;letter-spacing:.06em;color:var(--ink-faint);max-width:60ch}
+#scg-root .scg-title .scg-fine a{color:var(--ink-dim)}
+#scg-root .scg-title .scg-scouts{display:flex;gap:10px;margin-top:20px;opacity:.62}
+#scg-root .scg-title .scg-scouts img{height:84px;width:auto;border:1px solid var(--line);border-radius:4px}
+
+/* ---- result screen ---- */
+#scg-root .scg-result{grid-column:1/-1;background:var(--panel);border-top:1px solid var(--line);padding:16px;display:grid;grid-template-columns:1fr 320px;gap:16px}
+#scg-root .scg-result h2{font-family:var(--sans);font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
+#scg-root .scg-result h2.is-bad{color:var(--warn)}
+#scg-root .scg-result .scg-cap{font-size:11px;color:var(--ink-dim);letter-spacing:.04em;margin-bottom:12px;max-width:64ch}
+#scg-root .scg-hero{position:relative;background:#000;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:1/1}
+#scg-root .scg-hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#scg-root .scg-hero .scg-hero-lab{position:absolute;left:10px;top:9px;font-size:10px;letter-spacing:.16em;color:var(--accent);text-shadow:0 0 6px #000;white-space:pre}
+#scg-root .scg-hero .scg-hero-hu{position:absolute;right:10px;bottom:9px;font-size:10px;letter-spacing:.1em;color:var(--ink-dim);text-shadow:0 0 6px #000;text-align:right;white-space:pre}
+#scg-root .scg-debrief{display:flex;flex-direction:column;gap:9px}
+#scg-root .scg-grade{
+  display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel-2);padding:10px 12px;
+}
+#scg-root .scg-grade b{font-family:var(--sans);font-size:38px;color:var(--accent);line-height:1}
+#scg-root .scg-grade.is-warn b{color:var(--warn)}
+#scg-root .scg-grade.is-bad b{color:var(--bad)}
+#scg-root .scg-grade span{font-size:11px;color:var(--ink-dim);letter-spacing:.06em}
+#scg-root .scg-bar{height:6px;border-radius:3px;background:#0a0d08;border:1px solid var(--line-soft);overflow:hidden;margin-top:5px}
+#scg-root .scg-bar i{display:block;height:100%;background:var(--accent)}
+#scg-root .scg-drow{font-size:11.5px;display:flex;gap:8px;align-items:flex-start;border-bottom:1px dotted var(--line-soft);padding-bottom:7px}
+#scg-root .scg-drow i{font-style:normal;flex:none;width:16px;text-align:center}
+#scg-root .scg-drow .scg-d-ok{color:var(--accent)}
+#scg-root .scg-drow .scg-d-warn{color:var(--warn)}
+#scg-root .scg-drow .scg-d-bad{color:var(--bad)}
+#scg-root .scg-drow b{color:var(--ink);font-weight:600;letter-spacing:.04em}
+#scg-root .scg-drow em{font-style:normal;float:right;color:var(--ink-dim);margin-left:8px}
+#scg-root .scg-drow p{color:var(--ink-dim);margin-top:1px}
+#scg-root .scg-again{
+  margin-top:4px;padding:11px 16px;border:1px solid var(--accent);border-radius:7px;
+  background:#10200f;color:var(--accent);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+}
+#scg-root .scg-again:hover{background:var(--accent);color:var(--accent-ink)}
+#scg-root .scg-credits{grid-column:1/-1;font-size:10px;line-height:1.55;color:var(--ink-faint);border-top:1px dotted var(--line-soft);padding-top:10px;letter-spacing:.02em}
+#scg-root .scg-credits b{color:var(--ink-dim);font-weight:600}
+#scg-root .scg-credits a{color:var(--ink-dim)}
+
+/* stack scroller in result stage */
+#scg-root .scg-stack-ui{position:absolute;right:10px;top:10px;bottom:10px;width:26px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:8}
+#scg-root .scg-stack-ui input{writing-mode:vertical-lr;direction:ltr;width:22px;flex:1;accent-color:var(--accent);pointer-events:auto}
+#scg-root .scg-winbtns{position:absolute;left:10px;bottom:34px;display:flex;gap:5px;z-index:8}
+#scg-root .scg-winbtns button{font-size:9.5px;letter-spacing:.1em;padding:3px 7px;border:1px solid var(--line);border-radius:4px;background:rgba(10,14,8,.7);color:var(--ink-dim)}
+#scg-root .scg-winbtns button.is-on{border-color:var(--accent);color:var(--accent)}
+#scg-root .scg-winbtns .scg-pebtn{margin-left:6px;color:#f0a49e;border-color:rgba(224,108,95,.5)}
+#scg-root .scg-winbtns .scg-pebtn.is-on{color:#fff;background:rgba(224,108,95,.35);border-color:var(--bad)}
+
+/* scan-range box on the scanogram */
+#scg-root .scg-rangebox{
+  position:absolute;left:0;width:100%;z-index:6;
+  background:rgba(95,224,138,.10);
+  border-top:2px solid var(--accent);border-bottom:2px solid var(--accent);
+  box-shadow:inset 0 0 0 1px rgba(95,224,138,.25);
+  cursor:move;touch-action:none;
+}
+#scg-root .scg-rangebox.is-off{
+  background:rgba(232,180,95,.10);border-color:var(--warn);
+  box-shadow:inset 0 0 0 1px rgba(232,180,95,.3);
+}
+#scg-root .scg-rh{position:absolute;left:0;right:0;height:0;cursor:ns-resize;touch-action:none}
+#scg-root .scg-rh::before{content:"";position:absolute;left:0;right:0;top:-10px;height:20px}
+#scg-root .scg-rh-top{top:0}
+#scg-root .scg-rh-bot{bottom:0}
+#scg-root .scg-rh::after{
+  content:"";position:absolute;left:50%;width:34px;height:4px;transform:translateX(-50%);
+  background:var(--accent);border-radius:2px;
+}
+#scg-root .scg-rh-top::after{top:-2px}
+#scg-root .scg-rh-bot::after{bottom:-2px}
+#scg-root .scg-rangebox.is-off .scg-rh::after{background:var(--warn)}
+#scg-root .scg-rh span{
+  position:absolute;left:8px;font-size:10px;letter-spacing:.08em;white-space:nowrap;
+  background:rgba(6,10,5,.82);padding:2px 6px;border:1px solid rgba(95,224,138,.5);border-radius:3px;
+  color:var(--accent);
+}
+#scg-root .scg-rangebox.is-off .scg-rh span{color:var(--warn);border-color:rgba(232,180,95,.5)}
+#scg-root .scg-rh-top span{top:3px}
+#scg-root .scg-rh-bot span{bottom:3px}
+#scg-root .scg-rangebox .scg-range-cap{left:auto!important;right:8px;
+  position:absolute;left:8px;top:50%;transform:translateY(-50%);
+  font-size:9.5px;letter-spacing:.16em;color:rgba(95,224,138,.8);pointer-events:none;
+}
+#scg-root .scg-rangemask{position:absolute;left:0;width:100%;background:rgba(4,6,4,.6);z-index:5;pointer-events:none}
+#scg-root .scg-pip-box{position:absolute;left:0;right:0;border-top:1.5px solid var(--accent);border-bottom:1.5px solid var(--accent);background:rgba(95,224,138,.12)}
+#scg-root .scg-pip.is-off .scg-pip-box{border-color:var(--warn);background:rgba(232,180,95,.12)}
+
+/* ---- patient set-up scene (prone, head first, arm overhead) ---- */
+#scg-root .scg-room{position:absolute;inset:0;z-index:4;background:radial-gradient(110% 70% at 50% 35%,#1b2218,#0a0c09 75%)}
+#scg-root .scg-room svg{position:absolute;inset:0;width:100%;height:100%}
+#scg-root .scg-room3d{position:absolute;inset:0;display:none}
+#scg-root .scg-room.is-3d .scg-room3d{display:block}
+#scg-root .scg-room3d::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 95% at 50% 45%,transparent 60%,rgba(0,0,0,.28))}
+#scg-root .scg-room.is-3d .scg-roomsvg{display:none}
+#scg-root .scg-roomcap{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:2;display:none;
+  text-align:center;padding:7px 14px;border-radius:8px;background:rgba(10,14,9,.72);backdrop-filter:blur(3px);max-width:92%}
+#scg-root .scg-room.is-3d .scg-roomcap{display:block}
+#scg-root .scg-roomcap b{display:block;font-family:var(--sans);font-size:12px;letter-spacing:.24em;color:var(--ink)}
+#scg-root .scg-roomcap span{display:block;font-size:10.5px;color:#9fe7b8;letter-spacing:.04em;margin-top:2px}
+#scg-root .scg-room .scg-couch{transition:transform 4.2s cubic-bezier(.45,.05,.25,1)}
+#scg-root .scg-room.is-in .scg-couch{transform:translateX(70px)}
+#scg-root .scg-room .scg-laser{opacity:0;transition:opacity .6s ease 4.1s}
+#scg-root .scg-room.is-in .scg-laser{opacity:1}
+#scg-root .scg-room .scg-led{animation:scg-ledblink 1.6s ease-in-out infinite}
+@keyframes scg-ledblink{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* responsive */
+@media (max-width:780px){
+  #scg-root .scg-body{grid-template-columns:1fr}
+  #scg-root .scg-stage{border-right:0;border-bottom:1px solid var(--line)}
+  #scg-root .scg-result{grid-template-columns:1fr}
+  #scg-root .scg-rail-body{max-height:360px}
+}
+@media (max-width:470px){
+  #scg-root{font-size:13px}
+  #scg-root .scg-mark-tx span{display:none}
+  #scg-root .scg-phasechip{font-size:9px;letter-spacing:.1em;padding:4px 7px}
+  #scg-root .scg-viewport{max-height:74vh}
+  #scg-root .scg-log{height:84px}
+  #scg-root .scg-roomcap{top:8px;padding:5px 9px}
+  #scg-root .scg-roomcap b{font-size:10px;letter-spacing:.1em}
+  #scg-root .scg-roomcap span{font-size:9.5px}
+}
+
+/* ===== marker ===== */
+#scg-root .scg-ach-wrap{
+  grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
+  padding:16px 14px 6px;background:var(--panel);border-top:1px solid var(--line);
+}
+#scg-root .scg-ach{
+  width:100%;max-width:440px;position:relative;
+  background:linear-gradient(135deg,#141a12 0%,#20281c 100%);
+  border-left:5px solid var(--accent);border-radius:8px;
+  padding:16px 18px;display:flex;align-items:center;gap:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);
+  opacity:0;transform:translateX(90px);
+}
+#scg-root .scg-ach-logo{
+  width:40px;height:40px;object-fit:contain;flex-shrink:0;border-radius:5px;
+  background:#d3d5d3;padding:3px;opacity:0;
+}
+#scg-root .scg-ach-marker{
+  width:52px;height:52px;flex-shrink:0;position:relative;
+  background:linear-gradient(145deg,var(--accent),#3fbf6a);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 12px rgba(95,224,128,.45);
+  opacity:0;transform:translateY(-70px) scale(1.7) rotate(-12deg);
+}
+#scg-root .scg-ach-marker::after{               
+  content:'S';font-family:var(--sans);font-weight:800;font-size:21px;letter-spacing:.02em;color:#0c1a0f;line-height:1;
+}
+#scg-root .scg-ach-marker::before{
+  content:'';position:absolute;inset:-8px;border-radius:14px;
+  background:radial-gradient(circle,rgba(95,224,128,.5) 0%,transparent 70%);opacity:0;
+}
+#scg-root .scg-ach-text{flex:1;min-width:0;opacity:0;transform:translateY(8px)}
+#scg-root .scg-ach-label{font-size:11px;font-weight:600;letter-spacing:1.3px;color:var(--accent);text-transform:uppercase;margin-bottom:3px;font-family:var(--sans)}
+#scg-root .scg-ach-title{font-size:19px;font-weight:700;color:#f4f7f2;line-height:1.15;font-family:var(--sans)}
+#scg-root .scg-ach-sub{font-size:12px;color:var(--ink-dim);margin-top:3px}
+#scg-root .scg-ach-share{
+  margin-top:14px;text-align:center;font-size:13px;color:var(--ink-dim);
+  opacity:0;transform:translateY(10px);
+}
+#scg-root .scg-ach-share strong{color:var(--accent)}
+#scg-root .scg-ach-replay{
+  position:absolute;top:6px;right:6px;background:rgba(255,255,255,.07);border:0;
+  color:var(--ink-dim);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer;
+  opacity:0;transition:opacity .25s,background .25s,color .25s;font-family:var(--mono);
+}
+#scg-root .scg-ach:hover .scg-ach-replay{opacity:1}
+#scg-root .scg-ach-replay:hover{background:rgba(255,255,255,.14);color:#e2e8f0}
+#scg-root .scg-ach-wrap.is-playing .scg-ach{ animation:scg-ach-slide .7s cubic-bezier(.22,1,.36,1) .2s forwards; }
+#scg-root .scg-ach-wrap.is-playing .scg-ach-logo{ animation:scg-ach-fade .5s ease .9s forwards; }
+#scg-root .scg-ach-wrap.is-playing .scg-ach-marker{ animation:scg-ach-stamp .85s cubic-bezier(.34,1.4,.64,1) .55s forwards; }
+#scg-root .scg-ach-wrap.is-playing .scg-ach-marker::before{ animation:scg-ach-glow .6s ease 1.15s forwards; }
+#scg-root .scg-ach-wrap.is-playing .scg-ach-text{ animation:scg-ach-textin .5s ease 1.25s forwards; }
+#scg-root .scg-ach-wrap.is-playing .scg-ach-share{ animation:scg-ach-up .55s ease 1.7s forwards; }
+@keyframes scg-ach-slide{to{opacity:1;transform:translateX(0)}}
+@keyframes scg-ach-fade{to{opacity:1}}
+@keyframes scg-ach-textin{to{opacity:1;transform:translateY(0)}}
+@keyframes scg-ach-up{to{opacity:1;transform:translateY(0)}}
+@keyframes scg-ach-stamp{
+  0%{opacity:0;transform:translateY(-70px) scale(1.7) rotate(-12deg)}
+  55%{opacity:1;transform:translateY(10px) scale(.92) rotate(4deg)}
+  75%{transform:translateY(-5px) scale(1.06) rotate(-2deg)}
+  100%{opacity:1;transform:translateY(0) scale(1) rotate(0)}
+}
+@keyframes scg-ach-glow{
+  0%{opacity:0;transform:scale(.6)}40%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1.4)}
+}
+@media (prefers-reduced-motion:reduce){
+  #scg-root .scg-ach,#scg-root .scg-ach-logo,#scg-root .scg-ach-marker,
+  #scg-root .scg-ach-text,#scg-root .scg-ach-share{opacity:1!important;transform:none!important;animation:none!important}
+  #scg-root .scg-room .scg-couch{transition-duration:.01s}
+}
+#scg-root .scg-fov{
+  position:absolute;z-index:6;
+  background:rgba(95,224,138,.07);
+  border:2px solid var(--accent);
+  box-shadow:inset 0 0 0 1px rgba(95,224,138,.25),0 0 12px rgba(95,224,138,.15);
+  cursor:move;touch-action:none;
+}
+#scg-root .scg-fov.is-off{
+  background:rgba(232,180,95,.08);border-color:var(--warn);
+  box-shadow:inset 0 0 0 1px rgba(232,180,95,.3);
+}
+#scg-root .scg-fov-cap{
+  position:absolute;left:4px;top:3px;font-size:9px;letter-spacing:.14em;
+  color:rgba(95,224,138,.9);pointer-events:none;text-shadow:0 0 4px #000;white-space:nowrap;
+}
+#scg-root .scg-fov.is-off .scg-fov-cap{color:var(--warn)}
+#scg-root .scg-eh{position:absolute;touch-action:none}
+#scg-root .scg-eh-top,#scg-root .scg-eh-bot{left:0;right:0;height:0;cursor:ns-resize}
+#scg-root .scg-eh-left,#scg-root .scg-eh-right{top:0;bottom:0;width:0;cursor:ew-resize}
+#scg-root .scg-eh-top{top:0}#scg-root .scg-eh-bot{bottom:0}
+#scg-root .scg-eh-left{left:0}#scg-root .scg-eh-right{right:0}
+#scg-root .scg-eh-top::before,#scg-root .scg-eh-bot::before{content:"";position:absolute;left:0;right:0;top:-11px;height:22px}
+#scg-root .scg-eh-left::before,#scg-root .scg-eh-right::before{content:"";position:absolute;top:0;bottom:0;left:-11px;width:22px}
+#scg-root .scg-eh::after{content:"";position:absolute;background:var(--accent);border-radius:2px}
+#scg-root .scg-eh-top::after,#scg-root .scg-eh-bot::after{left:50%;width:34px;height:4px;transform:translateX(-50%)}
+#scg-root .scg-eh-left::after,#scg-root .scg-eh-right::after{top:50%;height:34px;width:4px;transform:translateY(-50%)}
+#scg-root .scg-eh-top::after{top:-2px}#scg-root .scg-eh-bot::after{bottom:-2px}
+#scg-root .scg-eh-left::after{left:-2px}#scg-root .scg-eh-right::after{right:-2px}
+#scg-root .scg-fov.is-off .scg-eh::after{background:var(--warn)}
+#scg-root .scg-fovmask{position:absolute;background:rgba(4,6,4,.62);z-index:5;pointer-events:none}
+
+/* DFOV box edge labels, pip box, orientation labels, recon segmented buttons */
+#scg-root .scg-eh-tag{position:absolute;left:8px;font-size:10px;letter-spacing:.08em;white-space:nowrap;pointer-events:none;
+  background:rgba(6,10,5,.82);padding:2px 6px;border:1px solid rgba(95,224,138,.5);border-radius:3px;color:var(--accent)}
+#scg-root .scg-eh-top .scg-eh-tag{top:4px}
+#scg-root .scg-eh-bot .scg-eh-tag{bottom:4px}
+#scg-root .scg-fov.is-off .scg-eh-tag{color:var(--warn);border-color:rgba(232,180,95,.5)}
+#scg-root .scg-fov-cap{left:0;top:-17px}
+#scg-root .scg-pip-box{right:auto;border:1.5px solid var(--accent)}
+#scg-root .scg-pip.is-off .scg-pip-box{border-color:var(--warn)}
+#scg-root .scg-orient{position:absolute;inset:0;pointer-events:none;z-index:7}
+#scg-root .scg-orient i{position:absolute;font-style:normal;font-size:9.5px;letter-spacing:.16em;color:rgba(159,231,184,.75);text-shadow:0 0 5px #000}
+#scg-root .scg-orient .o-t{top:30px;left:50%;transform:translateX(-50%)}
+#scg-root .scg-orient .o-b{bottom:58px;left:50%;transform:translateX(-50%)}
+#scg-root .scg-orient .o-l{left:8px;top:50%;transform:translateY(-50%)}
+#scg-root .scg-orient .o-r{right:40px;top:50%;transform:translateY(-50%)}
+#scg-root .scg-wsep{width:6px}
+#scg-root .scg-choice button.is-on{border-color:var(--accent);background:#10200f;box-shadow:inset 3px 0 0 var(--accent)}
+#scg-root .scg-stage.no-ret .scg-reticle{display:none}
+#scg-root .scg-seg{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+#scg-root .scg-seg span{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);width:52px}
+#scg-root .scg-seg button{flex:1;font-size:10.5px;letter-spacing:.08em;padding:7px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--ink-dim)}
+#scg-root .scg-seg button:hover{border-color:var(--accent);color:var(--accent)}
+#scg-root .scg-seg button.is-on{border-color:var(--accent);color:var(--accent-ink);background:var(--accent)}
+
+/* ================= X MARKS THE SPOT · CHEST X-RAY additions ================= */
+#scg-root .scg-cli::before{content:"x-ray $"}
+#scg-root .scg-ach-marker::after{content:'X'}
+#scg-root .xr-lf{position:absolute;inset:0;z-index:3;background:#0d0f0c}
+#scg-root .xr-lf svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none}
+#scg-root .xr-view{position:absolute;inset:0;z-index:3;background:#000}
+#scg-root .xr-view canvas{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%}
+#scg-root .xr-tools{position:absolute;left:8px;bottom:8px;z-index:6;display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100% - 16px)}
+#scg-root .xr-tools button{font-size:9.5px;letter-spacing:.1em;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:rgba(10,14,8,.8);color:var(--ink-dim)}
+#scg-root .xr-tools button.is-on{border-color:var(--accent);color:var(--accent)}
+#scg-root .xr-tools button:hover{border-color:var(--accent);color:var(--accent)}
+#scg-root .xr-mk{cursor:grab}
+#scg-root .xr-mk:active{cursor:grabbing}
+#scg-root .xr-req{border:1px solid var(--line);border-radius:7px;background:#f3f1ea;color:#23261f;padding:10px 11px;font-family:var(--sans);font-size:11.5px;line-height:1.45}
+#scg-root .xr-req b{display:block;font-size:10px;letter-spacing:.18em;color:#6b6f63;margin-bottom:4px}
+#scg-root .xr-req p{margin-top:3px}
+#scg-root .xr-req i{font-style:normal;color:#8a3b2f;font-weight:700}
+#scg-root .xr-ticks{display:flex;flex-direction:column;gap:5px}
+#scg-root .xr-ticks label{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--ink-dim);line-height:1.35;cursor:pointer;padding:6px 8px;border:1px solid var(--line-soft);border-radius:6px;background:#10140c}
+#scg-root .xr-ticks label.is-on{border-color:rgba(95,224,138,.45);color:var(--ink)}
+#scg-root .xr-ticks input{accent-color:var(--accent);margin-top:2px;flex:none}
+#scg-root .xr-grp{display:flex;flex-direction:column;gap:6px}
+#scg-root .xr-grp>span{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
+#scg-root .xr-grp .scg-choice button{padding:8px 10px}
+#scg-root .xr-grp .scg-choice button b{font-size:11.5px;margin-bottom:1px}
+#scg-root .xr-slider{display:flex;align-items:center;gap:8px}
+#scg-root .xr-slider span{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);width:44px}
+#scg-root .xr-slider input{flex:1;accent-color:var(--accent);min-width:0}
+#scg-root .xr-slider output{font-size:13px;color:var(--accent);min-width:64px;text-align:right}
+#scg-root .xr-aec{display:flex;justify-content:center;gap:0;padding:4px 0}
+#scg-root .xr-aec svg{width:132px;height:132px}
+#scg-root .xr-aec rect.ch{fill:rgba(95,224,138,.06);stroke:var(--ink-faint);stroke-width:1.5;cursor:pointer}
+#scg-root .xr-aec rect.ch.is-on{fill:rgba(95,224,138,.35);stroke:var(--accent)}
+#scg-root .xr-aec text{font-family:var(--mono);font-size:9px;fill:var(--ink-dim);pointer-events:none}
+#scg-root .xr-vpinfo{position:absolute;left:10px;top:9px;z-index:6;font-size:10.5px;letter-spacing:.08em;color:#9fe7b8;text-shadow:0 0 6px #000;white-space:pre;line-height:1.5;pointer-events:none}
+#scg-root .xr-vpinfo2{position:absolute;right:10px;bottom:9px;z-index:6;font-size:10.5px;letter-spacing:.08em;color:var(--ink-dim);text-shadow:0 0 6px #000;white-space:pre;line-height:1.5;text-align:right;pointer-events:none}
+#scg-root .xr-heroes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#scg-root .xr-heroes .scg-hero{aspect-ratio:auto;min-height:260px}
+#scg-root .xr-heroes canvas{display:block;width:100%;height:auto}
+#scg-root .xr-sub{font-family:var(--sans);font-size:12px;letter-spacing:.18em;color:var(--ink);margin:12px 0 6px;text-transform:uppercase}
+#scg-root .xr-crit{width:100%;border-collapse:collapse;font-size:10.5px}
+#scg-root .xr-crit td{vertical-align:top;color:var(--ink-dim);padding:5px 6px;border-bottom:1px dotted var(--line-soft);line-height:1.4}
+#scg-root .xr-crit td:first-child{width:18px;text-align:center}
+#scg-root .xr-crit td b{color:var(--ink)}
+#scg-root .xr-flash{position:absolute;inset:0;z-index:9;pointer-events:none;background:radial-gradient(circle at 50% 45%,rgba(200,230,255,.55),rgba(200,230,255,0) 70%);opacity:0}
+#scg-root .xr-flash.is-on{animation:xr-flash .7s ease-out}
+@keyframes xr-flash{0%{opacity:0}15%{opacity:1}100%{opacity:0}}
+#scg-root .xr-hold{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;padding:12px 18px;border-radius:9px;background:rgba(8,12,7,.85);
+  border:1px solid var(--line);font-family:var(--sans);letter-spacing:.2em;color:var(--ink);font-size:14px;text-align:center;pointer-events:none}
+#scg-root .xr-hold small{display:block;font-family:var(--mono);letter-spacing:.06em;font-size:11px;color:var(--ink-dim);margin-top:4px}
+@media (max-width:780px){ #scg-root .xr-heroes{grid-template-columns:1fr 1fr} }
+@media (max-width:470px){ #scg-root .xr-heroes{grid-template-columns:1fr} }
+</style>
+</head>
+<body style="margin:0;background:#0c0e0b">
+
+<!-- ================= X MARKS THE SPOT · CHEST X-RAY ================= -->
+<div id="scg-root">
+
+  <div class="scg-topbar">
+    <div class="scg-mark" id="scgMarkMini"></div>
+    <div class="scg-spacer"></div>
+    <div class="scg-phasechip" id="scgPhaseChip">STANDBY</div>
+  </div>
+
+  <div class="scg-body">
+    <div class="scg-stage" id="scgStage">
+      <div class="scg-viewport" id="scgViewport">
+
+        <!-- X-ray room -->
+        <div class="scg-room scg-hidden" id="scgRoom">
+          <div class="scg-room3d" id="scgRoom3d" aria-label="3-D view: the patient standing at the erect chest stand, X-ray tube on a ceiling mount"></div>
+          <div class="scg-roomcap"><b id="xrCapB">GENERAL X-RAY ROOM</b><span id="scgRoomStep">erect chest stand · ceiling tube</span></div>
+          <svg class="scg-roomsvg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" aria-label="Patient standing at the chest stand">
+            <rect x="0" y="470" width="600" height="130" fill="#0e110d"/>
+            <rect x="120" y="90" width="26" height="390" fill="#dfe5dc"/><rect x="146" y="200" width="18" height="150" fill="#2e3338"/>
+            <ellipse cx="200" cy="160" rx="26" ry="32" fill="#2a2018"/>
+            <path d="M170 200 h70 l10 140 h-90 Z" fill="#a9c8d8"/><path d="M175 340 h30 v130 h-30 Z M210 340 h30 v130 h-30 Z" fill="#2f3f57"/>
+            <rect x="420" y="0" width="30" height="230" fill="#c9cfd3"/><rect x="390" y="230" width="90" height="60" rx="20" fill="#f3f4f2"/>
+            <text x="300" y="58" fill="#dfe7d6" font-size="15" font-family="Trebuchet MS,sans-serif" letter-spacing="4" text-anchor="middle">ERECT CHEST STAND</text>
+          </svg>
+        </div>
+
+        <!-- light-beam view (what the radiographer sees from the tube side) -->
+        <div class="xr-lf scg-hidden" id="xrLF"><svg id="xrSvg" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="xr-tools" id="xrLfTools"></div></div>
+
+        <!-- image viewer -->
+        <div class="xr-view scg-hidden" id="xrView"><canvas id="xrViewCv" width="600" height="600"></canvas></div>
+
+        <div class="xr-vpinfo" id="xrInfo"></div>
+        <div class="xr-vpinfo2" id="xrInfo2"></div>
+        <div class="xr-flash" id="xrFlash"></div>
+        <div class="xr-hold scg-hidden" id="xrHold"></div>
+        <div class="scg-acq scg-hidden" id="scgAcq">
+          <div class="scg-acq-band"></div>
+          <h4 id="scgAcqTitle">PROCESSING</h4>
+          <div class="scg-acq-num" id="scgAcqNum"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="scg-rail">
+      <div class="scg-rail-head">
+        <h3 id="scgRailTitle">Console</h3>
+        <p id="scgRailDesc">Awaiting operator</p>
+      </div>
+      <div class="scg-rail-body" id="scgRailBody"></div>
+      <div class="scg-cmds" id="scgCmds"></div>
+      <form class="scg-cli" id="scgCliForm" autocomplete="off">
+        <input id="scgCli" type="text" placeholder="type a command — try: help" aria-label="command input">
+      </form>
+    </aside>
+
+    <div class="scg-log" id="scgLog"></div>
+
+    <div class="scg-ach-wrap scg-hidden" id="scgAch">
+      <div class="scg-ach" id="scgAchBanner">
+        <img class="scg-ach-logo" id="scgAchLogo" alt="Rad-Lad">
+        <div class="scg-ach-marker"></div>
+        <div class="scg-ach-text">
+          <div class="scg-ach-label">Marker Unlocked</div>
+          <div class="scg-ach-title">Get It Off Your Chest</div>
+          <div class="scg-ach-sub">Chest X-ray · PA and lateral, both diagnostic first time</div>
+        </div>
+        <button class="scg-ach-replay" id="scgAchReplay" type="button">Replay</button>
+      </div>
+      <div class="scg-ach-share">Share your <strong>Get It Off Your Chest</strong> Marker achievement below!</div>
+    </div>
+
+    <section class="scg-result scg-hidden" id="scgResult"></section>
+  </div>
+
+  <div class="scg-title" id="scgTitle">
+    <div class="scg-logo-plate"><img id="scgLogoBig" alt="Rad-Lad"></div>
+    <h1><span class="scg-the">X MARKS THE SPOT</span>CHEST X-RAY</h1>
+    <div class="scg-sub">Check the request, position the patient at the erect chest stand, put the cross-wires on the spot, collimate, place your marker and set the exposure — then PA and lateral are judged as a radiographer would</div>
+    <button class="scg-start" id="scgStart">▶ Begin</button>
+    <div class="scg-scouts"><img id="scgT1" alt=""><img id="scgT2" alt=""></div>
+    <div class="scg-fine">Educational simulation — not a medical device, not for clinical use.
+      The radiographs are a real, normal PA and lateral chest pair (CC0, Mikael Häggström); positioning and exposure errors are simulated on them in your browser — see the credits on the results screen.</div>
+  </div>
+
+</div>
+
+<script src="assets/calib.js"></script>
+<script src="room3d.js?v=1"></script>
+<script>
+(function(){
+"use strict";
+/* ---------------------------------------------------------------
+   X MARKS THE SPOT — chest X-ray positioning simulator
+   Request checks → PA: set-up (3-D room) → light beam: centre, collimate, marker → exposure → review (accept/repeat)
+   → lateral: the same → debrief.
+   "Film mm": every position is in mm on the real radiograph as displayed (PA: patient's right on the viewer's
+   left; lateral: anterior on the left), 0.25 mm per pixel. The light-beam view from the tube side is the mirror
+   image of the film for PA and left-lateral set-ups (you look at the patient's back / right side).
+   --------------------------------------------------------------- */
+var BASE = "./assets/";
+var CAL = window.XR_CALIB;
+var ASSETS = window.SCG_ASSETS || null;
+var PNG = { logo_full:1, logo_mark:1 };
+function url(n){ return ASSETS ? ASSETS[n] : BASE + n + (PNG[n] ? ".png" : ".jpg"); }
+var $ = function(id){ return document.getElementById(id); };
+var stage=$("scgStage"), vp=$("scgViewport"), room=$("scgRoom"), lf=$("xrLF"), svg=$("xrSvg"), lfTools=$("xrLfTools"),
+    viewEl=$("xrView"), viewCv=$("xrViewCv"), info=$("xrInfo"), info2=$("xrInfo2"), flashEl=$("xrFlash"), holdEl=$("xrHold"),
+    acqEl=$("scgAcq"), acqTitle=$("scgAcqTitle"), acqNum=$("scgAcqNum"),
+    railTitle=$("scgRailTitle"), railDesc=$("scgRailDesc"), railBody=$("scgRailBody"),
+    cmds=$("scgCmds"), cliForm=$("scgCliForm"), cli=$("scgCli"), logEl=$("scgLog"), phaseChip=$("scgPhaseChip"),
+    titleEl=$("scgTitle"), resultEl=$("scgResult"), achWrap=$("scgAch");
+
+$("scgMarkMini").innerHTML = '<img class="scg-mark-ic" src="'+url("logo_mark")+'" alt="Rad-Lad">'+
+  '<div class="scg-mark-tx"><b>X&nbsp;MARKS&nbsp;THE&nbsp;SPOT&nbsp;·&nbsp;CHEST&nbsp;X-RAY</b><span>Rad-Lad&nbsp;·&nbsp;Illuminate&nbsp;the&nbsp;Invisible</span></div>';
+$("scgLogoBig").src = url("logo_full"); $("scgAchLogo").src = url("logo_mark");
+$("scgT1").src = url("pa_t"); $("scgT2").src = url("lat_t");
+function playAchievement(){ achWrap.classList.remove("is-playing"); void achWrap.offsetWidth; achWrap.classList.add("is-playing"); }
+$("scgAchReplay").addEventListener("click", playAchievement);
+
+/* =============================================================
+   TEACHING DATA
+   ============================================================= */
+var PROJ = {
+  pa:  { name:"PA", long:"PA erect chest", ref:CAL.pa.ref, view:{ x0:-265, y0:-330, s:810 } },
+  lat: { name:"LAT", long:"Left lateral chest", ref:CAL.lat.ref, view:{ x0:-275, y0:-385, s:810 } }
+};
+var CHECKS = [
+  { id:"id",   t:"Patient identity confirmed", s:"three-point ID: name, date of birth, address — against the request" },
+  { id:"just", t:"Request justified", s:"clinical details support a PA + lateral chest; referrer and history complete" },
+  { id:"neck", t:"Necklace and earrings removed", s:"metal over the neck and apices will show on the film" },
+  { id:"gown", t:"Top and bra off, gown on", s:"clips, hooks and underwire overlie the thorax" },
+  { id:"hair", t:"Long hair tied up out of the way", s:"a plait or ponytail can overlie the lung apices" }
+];
+var SET = {
+  pa: [
+    { key:"face", label:"Facing", opts:[
+      { v:"pa", b:"Facing the detector (PA)", s:"anterior chest against the stand — heart close to the detector", ok:1 },
+      { v:"ap", b:"Back to the detector (AP)", s:"for patients who can't stand facing it — magnifies the heart", ok:0 } ] },
+    { key:"arms", label:"Arms", opts:[
+      { v:"hips", b:"Backs of hands on hips, elbows forward", s:"rolls the shoulders forward so the scapulae clear the lungs", ok:1 },
+      { v:"side", b:"Arms hanging by the side", s:"scapulae stay over the lateral lung fields", ok:0 },
+      { v:"up", b:"Arms raised above the head", s:"the lateral position — for a PA it lifts the clavicles and soft tissue", ok:0 } ] },
+    { key:"chin", label:"Chin", opts:[
+      { v:"up", b:"Chin raised, resting on the stand", s:"lifts the chin and mandible clear of the apices", ok:1 },
+      { v:"down", b:"Chin tucked down", s:"the jaw overlies the upper airway and apices", ok:0 } ] },
+    { key:"sid", label:"SID", seg:[100, 150, 180], ok:180, s:"180 cm keeps magnification of the heart to a minimum" }
+  ],
+  lat: [
+    { key:"side", label:"Side to the detector", opts:[
+      { v:"L", b:"Left side against the detector", s:"the standard lateral — heart closest to the detector, and the side of her pain", ok:1 },
+      { v:"R", b:"Right side against the detector", s:"magnifies the heart; used only to look at right-sided pathology", ok:0 } ] },
+    { key:"arms", label:"Arms", opts:[
+      { v:"up", b:"Arms raised, forearms resting on the head", s:"(or holding the grip above the stand) — clears the humeri from the chest", ok:1 },
+      { v:"side", b:"Arms by the side", s:"the humeri and soft tissue overlie the upper chest", ok:0 },
+      { v:"hips", b:"Hands on hips", s:"the PA arm position — the arms project over the thorax", ok:0 } ] },
+    { key:"sid", label:"SID", seg:[100, 150, 180], ok:180, s:"180 cm, the same as the PA" }
+  ]
+};
+var BREATH = [
+  { v:"in", b:"“Take a deep breath in… and hold it”", s:"full inspiration — diaphragms low, 10 posterior ribs", ok:1 },
+  { v:"out", b:"“Breathe out… and hold it”", s:"expiration — only for specific indications (e.g. an occult pneumothorax)", ok:0 },
+  { v:"none", b:"(no breathing instruction)", s:"the patient may be breathing during the exposure", ok:0 }
+];
+var EXPO = { pa:{ kv:120, mas:2.0 }, lat:{ kv:120, mas:5.0 } };   // the manual set that gives DI 0 (grid, 180 cm)
+var MAS_STEPS = [0.5, 0.63, 0.8, 1, 1.25, 1.6, 2, 2.5, 3.2, 4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 32];
+
+/* =============================================================
+   STATE
+   ============================================================= */
+var S;
+function freshProj(p){
+  return {
+    set: p==="pa" ? { face:null, arms:null, chin:null, sid:null } : { side:null, arms:null, sid:null },
+    field: p==="pa" ? { cx:150, cy:120, w:350, h:350 } : { cx:150, cy:140, w:350, h:350 },
+    marker: null,                                  // { l:"L"|"R", x, y } in film mm
+    expo: { kv:p==="pa" ? 90 : 90, mas:4, aec:true, ch:{ l:false, c:true, r:false }, grid:true, breath:null },
+    shots: [], accepted:false
+  };
+}
+function freshState(){
+  return { phase:"title", proj:"pa", stepI:0, checks:{}, palp:false, showAec:true,
+           pa:freshProj("pa"), lat:freshProj("lat"), dose:0, repeats:0, firstGood:{ pa:false, lat:false } };
+}
+S = freshState();
+
+/* =============================================================
+   LOG / PHASE / COMMANDS
+   ============================================================= */
+function log(msg, cls){ var d=document.createElement("div"); if(cls) d.className="scg-l-"+cls; d.innerHTML=msg; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
+var PHASE_CHIP = { title:"STANDBY", req:"REQUEST", setup:"POSITIONING", centre:"LIGHT BEAM", expose:"EXPOSURE", review:"IMAGE REVIEW", result:"DEBRIEF" };
+function cur(){ return S[S.proj]; }
+function setPhase(ph){
+  S.phase = ph;
+  phaseChip.textContent = (ph==="setup"||ph==="centre"||ph==="expose"||ph==="review" ? PROJ[S.proj].name+" · " : "") + PHASE_CHIP[ph];
+  room.classList.toggle("scg-hidden", !(ph==="req"||ph==="setup"||ph==="expose"));
+  lf.classList.toggle("scg-hidden", ph!=="centre");
+  viewEl.classList.toggle("scg-hidden", !(ph==="review"||ph==="result"));
+  info.textContent = ""; info2.textContent = "";
+  if(room3d){ if(room.classList.contains("scg-hidden")) room3d.stop(); else room3d.start(); }
+  render();
+}
+var CMD = {
+  begin:{ k:"begin", t:"Patient ready — start positioning", go:function(){ startProj("pa"); } },
+  centre:{ k:"next", t:"Light beam: centre & collimate ▸", go:function(){ gotoCentre(); } },
+  expose:{ k:"next", t:"To the exposure console ▸", go:function(){ gotoExpose(); } },
+  back:{ k:"back", t:"◂ Back", go:function(){ goBack(); } },
+  fire:{ k:"expose", t:"☢ EXPOSE", go:function(){ expose(); } },
+  accept:{ k:"accept", t:"✓ Accept image", go:function(){ accept(); } },
+  repeat:{ k:"repeat", t:"↻ Repeat (re-position)", go:function(){ repeatShot(); } },
+  again:{ k:"restart", t:"↺ Start again", go:function(){ resetAll(); } }
+};
+function cmdList(){
+  switch(S.phase){
+    case "req": return ["begin"];
+    case "setup": return ["centre"];
+    case "centre": return ["expose", "back"];
+    case "expose": return ["fire", "back"];
+    case "review": return ["accept", "repeat"];
+    case "result": return ["again"];
+  }
+  return [];
+}
+function cmdEnabled(c){
+  if(c==="begin") return true;
+  if(c==="centre") return setupDone();
+  if(c==="expose") return !!cur().marker;
+  if(c==="fire") return !!cur().expo.breath && (!cur().expo.aec || chCount()>0) && !S.busy;
+  if(c==="repeat") return cur().shots.length < 4;
+  return true;
+}
+function renderCmds(){
+  cmds.innerHTML = "";
+  cmdList().forEach(function(c, i){
+    var b=document.createElement("button"); b.className="scg-btn"+(i===0?" is-primary":"");
+    var en=cmdEnabled(c); b.disabled=!en; if(i===0 && en) b.classList.add("is-pulse");
+    b.innerHTML=CMD[c].t+'<span class="scg-key">'+CMD[c].k+'</span>';
+    b.addEventListener("click", function(){ logCmd(CMD[c].k); CMD[c].go(); });
+    cmds.appendChild(b);
+  });
+}
+function logCmd(c){ log("$ "+c, "cmd"); }
+
+/* =============================================================
+   RAIL
+   ============================================================= */
+function choiceBtns(opts, curV, onPick){
+  return '<div class="scg-choice">'+opts.map(function(o){
+    return '<button type="button" data-v="'+o.v+'" class="'+(curV===o.v?"is-on":"")+'"><b>'+o.b+'</b><span>'+o.s+'</span></button>';
+  }).join("")+'</div>';
+}
+function bindChoices(root, fn){
+  Array.prototype.forEach.call(root.querySelectorAll(".scg-choice"), function(ch){
+    Array.prototype.forEach.call(ch.querySelectorAll("button"), function(b){
+      b.addEventListener("click", function(){ fn(ch.dataset.key, b.dataset.v); });
+    });
+  });
+}
+function setupDone(){ var s=cur().set; return Object.keys(s).every(function(k){ return s[k]!=null; }); }
+function render(){
+  renderCmds();
+  var ph=S.phase, P=cur(), h="";
+  if(ph==="req"){
+    railTitle.textContent="Request & checks"; railDesc.textContent="Before the patient comes in";
+    h += '<div class="xr-req"><b>X-RAY REQUEST · CHEST</b>'+
+         '<p><b style="display:inline;letter-spacing:0;color:#23261f;font-size:11.5px">PA and lateral chest</b></p>'+
+         '<p>21-year-old woman. Pain in the left side of the chest after a collision with another player during a football match. <i>?rib injury ?pneumothorax.</i></p>'+
+         '<p>Walked in; able to stand and follow instructions.</p></div>';
+    h += '<div class="xr-grp"><span>Pre-exposure checks</span><div class="xr-ticks">'+CHECKS.map(function(c){
+      return '<label class="'+(S.checks[c.id]?"is-on":"")+'"><input type="checkbox" data-c="'+c.id+'"'+(S.checks[c.id]?" checked":"")+'><span><b style="color:inherit">'+c.t+'</b><br><span style="color:var(--ink-faint)">'+c.s+'</span></span></label>';
+    }).join("")+'</div></div>';
+    h += '<div class="scg-hint">Anything you don\'t check is still on the patient when you expose.</div>';
+  }
+  else if(ph==="setup"){
+    railTitle.textContent=PROJ[S.proj].long+" · set-up"; railDesc.textContent="The 3-D room updates as you choose · drag to look around";
+    SET[S.proj].forEach(function(g){
+      h += '<div class="xr-grp"><span>'+g.label+'</span>';
+      if(g.seg){ h += '<div class="scg-seg" data-key="'+g.key+'">'+g.seg.map(function(v){ return '<button type="button" data-v="'+v+'" class="'+(P.set[g.key]===v?"is-on":"")+'">'+v+' cm</button>'; }).join("")+'</div><div class="scg-hint">'+g.s+'</div>'; }
+      else h += choiceBtns(g.opts, P.set[g.key]).replace('<div class="scg-choice">','<div class="scg-choice" data-key="'+g.key+'">');
+      h += '</div>';
+    });
+  }
+  else if(ph==="centre"){
+    railTitle.textContent=PROJ[S.proj].long+" · light beam"; railDesc.textContent="X marks the spot: cross-wires = central ray";
+    var f=P.field;
+    h += '<div class="scg-readout"><div class="scg-ro-lab">Light field</div><div class="scg-ro-val">'+(f.w/10).toFixed(1)+' × '+(f.h/10).toFixed(1)+' <small>cm</small></div></div>';
+    h += '<div class="scg-hint">'+(S.proj==="pa"
+      ? 'You are behind the patient, looking at her back. <b>Drag the field</b> to put the cross-wires on the central ray point; <b>drag its edges</b> to collimate (the collimator opens symmetrically). Include the apices, both lateral rib margins and the costophrenic angles — and no more than you need.'
+      : 'You are at her right side (left side against the detector). <b>Drag the field</b> to the central ray point; <b>drag its edges</b> to collimate: apices, anterior chest wall, posterior ribs / spine and the posterior costophrenic recesses.')+'</div>';
+    h += '<div class="xr-grp"><span>Anatomical marker</span><div class="scg-hint">Drag a lead marker onto the detector inside the field, clear of anatomy. You can see where her left and right are from here.</div>'+
+         '<div class="scg-seg" id="xrMkBtns"><button type="button" data-l="L" class="'+(P.marker&&P.marker.l==="L"?"is-on":"")+'">L marker</button><button type="button" data-l="R" class="'+(P.marker&&P.marker.l==="R"?"is-on":"")+'">R marker</button></div>'+
+         '<div class="scg-hint">'+(P.marker ? 'Marker <b>'+P.marker.l+'</b> placed — drag it to adjust.' : 'Tap a marker to drop it in the field, then drag it.')+'</div></div>';
+    h += '<div class="scg-hint">Tools on the image: <b>Palpate</b> shows the landmarks you would feel; <b>AEC</b> shows the ionisation chambers on the detector.</div>';
+  }
+  else if(ph==="expose"){
+    railTitle.textContent=PROJ[S.proj].long+" · exposure"; railDesc.textContent="Set the factors, give the breathing instruction, expose";
+    var e=P.expo;
+    h += '<div class="xr-slider"><span>kV</span><input type="range" id="xrKv" min="60" max="150" step="1" value="'+e.kv+'"><output>'+e.kv+' kV</output></div>';
+    h += '<div class="scg-seg" data-k="mode"><span>Mode</span><button type="button" data-v="aec" class="'+(e.aec?"is-on":"")+'">AEC</button><button type="button" data-v="man" class="'+(!e.aec?"is-on":"")+'">Manual</button></div>';
+    if(e.aec){
+      h += '<div class="xr-aec"><svg viewBox="0 0 132 132"><rect x="2" y="2" width="128" height="128" rx="6" fill="#0a0d08" stroke="#2c3a22"/>'+
+           '<line x1="66" y1="54" x2="66" y2="78" stroke="#2c3a22"/><line x1="54" y1="66" x2="78" y2="66" stroke="#2c3a22"/>'+
+           '<rect class="ch'+(e.ch.l?" is-on":"")+'" data-c="l" x="19" y="26" width="22" height="30" rx="3"/>'+
+           '<rect class="ch'+(e.ch.r?" is-on":"")+'" data-c="r" x="91" y="26" width="22" height="30" rx="3"/>'+
+           '<rect class="ch'+(e.ch.c?" is-on":"")+'" data-c="c" x="55" y="62" width="22" height="30" rx="3"/>'+
+           '<text x="66" y="122" text-anchor="middle">tap chambers</text></svg></div>';
+      h += '<div class="scg-kv"><span>mAs</span><span>set by the AEC</span></div>';
+    } else {
+      var mi=nearestMas(e.mas);
+      h += '<div class="xr-slider"><span>mAs</span><input type="range" id="xrMas" min="0" max="'+(MAS_STEPS.length-1)+'" step="1" value="'+mi+'"><output>'+MAS_STEPS[mi]+' mAs</output></div>';
+    }
+    h += '<div class="scg-seg" data-k="grid"><span>Grid</span><button type="button" data-v="on" class="'+(e.grid?"is-on":"")+'">In</button><button type="button" data-v="off" class="'+(!e.grid?"is-on":"")+'">Out</button></div>';
+    h += '<div class="xr-grp"><span>Breathing instruction</span>'+choiceBtns(BREATH, e.breath).replace('<div class="scg-choice">','<div class="scg-choice" data-key="breath">')+'</div>';
+    h += kvBlock([["Projection", PROJ[S.proj].long], ["SID", P.set.sid+" cm"], ["Field", (P.field.w/10).toFixed(1)+" × "+(P.field.h/10).toFixed(1)+" cm"], ["Marker", P.marker ? P.marker.l : "—"]]);
+  }
+  else if(ph==="review"){
+    var shot=P.shots[P.shots.length-1];
+    railTitle.textContent=PROJ[S.proj].long+" · review"; railDesc.textContent="Would you send this image to the radiologist?";
+    h += '<div class="scg-readout'+(Math.abs(shot.di)>2?" is-warn":"")+'"><div class="scg-ro-lab">Deviation index</div><div class="scg-ro-val">'+(shot.di>=0?"+":"")+shot.di.toFixed(1)+' <small>EI '+shot.ei+' · target 400</small></div></div>';
+    h += kvBlock([["kV / mAs", shot.kv+" / "+shot.mas], ["DAP", shot.dap.toFixed(3)+" Gy·cm²"], ["Exposure", (P.shots.length)+(P.shots.length>1?" (repeat)":"")]]);
+    h += '<div class="xr-grp"><span>Your critique</span><div class="scg-hint">Check the film against the criteria: inspiration, rotation, scapulae, apices and costophrenic angles, collimation, marker, exposure. The full debrief comes at the end.</div></div>';
+    h += '<div class="scg-hint">Accept if it is diagnostic; repeat if it isn\'t — every repeat is another dose.</div>';
+  }
+  else if(ph==="result"){
+    railTitle.textContent="Debrief"; railDesc.textContent="Scroll down for the full critique";
+    h += '<div class="scg-hint">Your accepted films are in the viewer. Tap either film in the debrief to show it here.</div>';
+  }
+  railBody.innerHTML = h;
+  bindRail();
+}
+function kvBlock(rows){ return '<div>'+rows.map(function(r){ return '<div class="scg-kv"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>'; }).join('')+'</div>'; }
+function nearestMas(m){ var bi=0; MAS_STEPS.forEach(function(v, i){ if(Math.abs(v-m) < Math.abs(MAS_STEPS[bi]-m)) bi=i; }); return bi; }
+function bindRail(){
+  var P=cur();
+  Array.prototype.forEach.call(railBody.querySelectorAll(".xr-ticks input"), function(inp){
+    inp.addEventListener("change", function(){ S.checks[inp.dataset.c]=inp.checked; render(); });
+  });
+  bindChoices(railBody, function(key, v){
+    if(key==="breath"){ P.expo.breath=v; log("Instruction: "+BREATH.filter(function(b){ return b.v===v; })[0].b, "sys"); render(); return; }
+    setChoice(key, v);
+  });
+  Array.prototype.forEach.call(railBody.querySelectorAll(".scg-seg[data-key]"), function(sg){
+    Array.prototype.forEach.call(sg.querySelectorAll("button"), function(b){ b.addEventListener("click", function(){ setChoice(sg.dataset.key, +b.dataset.v); }); });
+  });
+  Array.prototype.forEach.call(railBody.querySelectorAll(".scg-seg[data-k]"), function(sg){
+    Array.prototype.forEach.call(sg.querySelectorAll("button"), function(b){ b.addEventListener("click", function(){
+      if(sg.dataset.k==="mode") P.expo.aec = b.dataset.v==="aec"; else P.expo.grid = b.dataset.v==="on";
+      render(); }); });
+  });
+  var kv=$("xrKv"); if(kv) kv.addEventListener("input", function(){ P.expo.kv=+kv.value; kv.nextElementSibling.textContent=kv.value+" kV"; });
+  var ms=$("xrMas"); if(ms) ms.addEventListener("input", function(){ P.expo.mas=MAS_STEPS[+ms.value]; ms.nextElementSibling.textContent=P.expo.mas+" mAs"; });
+  Array.prototype.forEach.call(railBody.querySelectorAll(".xr-aec rect.ch"), function(r){
+    r.addEventListener("click", function(){ P.expo.ch[r.dataset.c]=!P.expo.ch[r.dataset.c]; render(); });
+  });
+  var mk=$("xrMkBtns"); if(mk) Array.prototype.forEach.call(mk.querySelectorAll("button"), function(b){ b.addEventListener("click", function(){ dropMarker(b.dataset.l); }); });
+}
+function chCount(){ var c=cur().expo.ch; return (c.l?1:0)+(c.c?1:0)+(c.r?1:0); }
+function setChoice(key, v){
+  var P=cur(); P.set[key]=v;
+  var g=SET[S.proj].filter(function(x){ return x.key===key; })[0];
+  var ok = g.seg ? v===g.ok : g.opts.filter(function(o){ return o.v===v; })[0].ok;
+  var txt = g.seg ? "SID "+v+" cm" : g.opts.filter(function(o){ return o.v===v; })[0].b;
+  log(g.label+": "+txt, "sys");
+  syncRoom(); render();
+}
+
+/* =============================================================
+   3-D ROOM
+   ============================================================= */
+var THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js";
+var room3d=null, room3dTried=false;
+window.__room=function(){ return room3d; };
+function init3D(){
+  if(room3dTried){ if(room3d){ syncRoom(); room3d.start(); } return; }
+  room3dTried=true;
+  if(!window.SCG_ROOM3D) return;
+  import(THREE_URL).then(function(THREE){
+    try{ room3d=window.SCG_ROOM3D(THREE, $("scgRoom3d")); room.classList.add("is-3d"); syncRoom(); room3d.start(); }
+    catch(e){ room3d=null; room.classList.remove("is-3d"); if(window.console) console.error(e); }
+  }).catch(function(){ room3d=null; });
+}
+function roomPose(){
+  var P=cur(), s=P.set;
+  if(S.phase==="req") return { proj:"pa", face:"ap", arms:"side", chin:"neutral" };
+  if(S.proj==="pa") return { proj:"pa", face:s.face||"pa", arms:s.arms||"side", chin:s.chin||"neutral" };
+  return { proj:"lat", side:s.side||"L", arms:s.arms||"side", chin:"neutral" };
+}
+function fieldWorld(){       // light field for the room: size, and the central ray relative to the reference point
+  var P=cur(), f=P.field, ref=PROJ[S.proj].ref;
+  var mir = mirrored() ? -1 : 1;     // mirrored views (PA, left lateral): film +x runs toward world -x
+  return { w:f.w/1000, h:f.h/1000, dx:mir*(f.cx-ref[0])/1000, dy:-(f.cy-ref[1])/1000 };
+}
+function syncRoom(){
+  if(!room3d) return;
+  room3d.setPose(roomPose());
+  var P=cur();
+  room3d.setSID(P.set.sid || 180);
+  room3d.setField((S.phase==="expose") ? fieldWorld() : null);
+  room3d.view(S.phase==="expose" ? "tube" : "room");
+  var cap=$("xrCapB"), st=$("scgRoomStep");
+  if(S.phase==="req"){ cap.textContent="GENERAL X-RAY ROOM"; st.textContent="the patient has changed into a gown"; }
+  else if(S.phase==="setup"){ cap.textContent=PROJ[S.proj].long.toUpperCase(); st.textContent=setupDone() ? "set-up complete — on to the light beam" : "choose the set-up in the console"; }
+  else if(S.phase==="expose"){ cap.textContent="LIGHT BEAM ON"; st.textContent="field "+(P.field.w/10).toFixed(0)+" × "+(P.field.h/10).toFixed(0)+" cm · SID "+(P.set.sid||180)+" cm"; }
+}
+
+/* =============================================================
+   LIGHT-BEAM VIEW (SVG, film mm; mirrored where the tube sees the film's mirror image)
+   ============================================================= */
+function mirrored(){ var s=cur().set; return S.proj==="pa" ? s.face!=="ap" : s.side!=="R"; }
+var NS="http://www.w3.org/2000/svg";
+function VX(x){ var v=PROJ[S.proj].view; return mirrored() ? (2*(v.x0+v.s/2) - x) : x; }   // film x -> view x
+function sym(pts, mid){ var r=pts.map(function(p){ return [mid-p[0], p[1]]; }), l=pts.slice().reverse().map(function(p){ return [mid+p[0], p[1]]; }); return r.concat(l); }
+function path(pts, close){ return pts.map(function(p, i){ return (i?"L":"M")+VX(p[0]).toFixed(1)+" "+p[1].toFixed(1); }).join(" ")+(close===false?"":" Z"); }
+function smooth(pts){                       // closed Catmull-Rom -> cubic beziers, in view coords
+  var n=pts.length, P=pts.map(function(p){ return [VX(p[0]), p[1]]; }), d="M"+P[0][0].toFixed(1)+" "+P[0][1].toFixed(1);
+  for(var i=0;i<n;i++){
+    var p0=P[(i-1+n)%n], p1=P[i], p2=P[(i+1)%n], p3=P[(i+2)%n];
+    d+=" C"+(p1[0]+(p2[0]-p0[0])/6).toFixed(1)+" "+(p1[1]+(p2[1]-p0[1])/6).toFixed(1)+" "+(p2[0]-(p3[0]-p1[0])/6).toFixed(1)+" "+(p2[1]-(p3[1]-p1[1])/6).toFixed(1)+" "+p2[0].toFixed(1)+" "+p2[1].toFixed(1);
+  }
+  return d+" Z";
+}
+function bodyPA(){
+  var s=cur().set, mid=CAL.pa.mid, back = s.face!=="ap", g="";
+  var torso = sym([[52,-70],[56,-18],[64,2],[100,9],[140,20],[168,34],[178,52],[166,92],[154,140],[150,200],[143,260],[130,330],[132,390],[150,450],[158,520],[150,540]], mid);
+  var arms = s.arms==="hips" ? [[[176,40],[198,44],[238,192],[232,214],[170,352],[146,345],[200,206],[168,96]]]
+           : s.arms==="up"   ? [[[150,30],[180,26],[176,-210],[150,-300],[118,-312],[124,-210]]]
+           :                   [[[170,40],[200,48],[210,200],[214,330],[212,430],[196,470],[176,468],[176,330],[166,200],[160,96]]];
+  g += '<path d="'+smooth(torso)+'" fill="url(#xrGown)" stroke="#5f7f92" stroke-width="2"/>';
+  // neck + head
+  g += '<path d="'+smooth(sym([[50,-120],[52,-60],[60,0]], mid).concat([]))+'" fill="#c9926f"/>';
+  var hy = s.chin==="up" ? -150 : (s.chin==="down" ? -160 : -155);
+  g += back ? '<ellipse cx="'+VX(mid)+'" cy="'+hy+'" rx="74" ry="94" fill="#2a2018"/><ellipse cx="'+VX(mid)+'" cy="'+(hy-30)+'" rx="34" ry="28" fill="#1f1812"/>'
+            : '<ellipse cx="'+VX(mid)+'" cy="'+hy+'" rx="70" ry="92" fill="#cf9a7c"/><path d="M'+(VX(mid)-72)+' '+(hy-20)+' Q'+VX(mid)+' '+(hy-140)+' '+(VX(mid)+72)+' '+(hy-20)+' Q'+VX(mid)+' '+(hy-75)+' '+(VX(mid)-72)+' '+(hy-20)+'Z" fill="#2a2018"/>'+
+              '<ellipse cx="'+VX(mid-26)+'" cy="'+(hy-8)+'" rx="10" ry="5" fill="#3b2c22"/><ellipse cx="'+VX(mid+26)+'" cy="'+(hy-8)+'" rx="10" ry="5" fill="#3b2c22"/><path d="M'+(VX(mid)-14)+' '+(hy+45)+' Q'+VX(mid)+' '+(hy+52)+' '+(VX(mid)+14)+' '+(hy+45)+'" stroke="#9a5a4e" stroke-width="3" fill="none"/>';
+  if(back){
+    // scapulae (shading) and the spine
+    var sc = s.arms==="hips" ? [[72,30],[104,178],[150,78],[172,40]] : [[52,30],[84,170],[142,78],[168,40]];
+    [-1, 1].forEach(function(k){ g += '<path d="'+smooth(sc.map(function(p){ return [mid+k*p[0], p[1]]; }))+'" fill="rgba(60,90,110,.16)" stroke="rgba(60,90,110,.3)" stroke-width="2"/>'; });
+    g += '<path d="'+path([[mid,-5],[mid,330]], false)+'" stroke="rgba(60,90,110,.35)" stroke-width="3" fill="none"/>';
+    g += '<path d="'+path([[mid-6,10],[mid+6,10]], false)+'" stroke="#8a6a55" stroke-width="2"/>';   // gown tie
+  }
+  arms.forEach(function(a){ [-1, 1].forEach(function(k){
+    g += '<path d="'+smooth(a.map(function(p){ return [mid+k*p[0], p[1]]; }))+'" fill="#cf9a7c" stroke="#a87458" stroke-width="2"/>';
+    g += '<path d="'+smooth(a.slice(0, 2).concat([[a[1][0]+4, a[1][1]+45],[a[0][0]-6, a[0][1]+50]]).map(function(p){ return [mid+k*p[0], p[1]]; }))+'" fill="url(#xrGown)"/>';
+  }); });
+  return g;
+}
+function bodyLAT(){
+  var s=cur().set, g="";
+  var post=[[185,0],[207,15],[220,30],[227,45],[234,60],[240,90],[244,120],[249,150],[251,180],[252,210],[249,240],[246,270],[238,300],[236,330],[230,360],[226,400],[234,450],[248,500],[250,540]];
+  var ant=[[20,540],[16,480],[8,420],[4,360],[4,330],[7,300],[12,270],[13,255],[7,240],[4,210],[6,195],[12,180],[14,150],[18,120],[26,92],[42,62],[60,38],[74,14]];
+  var neck=[[78,-20],[80,-70],[150,-80],[170,-20]];
+  g += '<path d="'+path(post.concat(ant))+'" fill="url(#xrGown)" stroke="#5f7f92" stroke-width="2"/>';
+  g += '<path d="'+smooth(neck.concat([[176,5],[70,8]]))+'" fill="#c9926f"/>';
+  var hc=[120,-160];
+  g += '<ellipse cx="'+VX(hc[0])+'" cy="'+hc[1]+'" rx="82" ry="96" fill="#cf9a7c"/>';
+  g += '<path d="'+path([[hc[0]-80,-178],[hc[0]-98,-150],[hc[0]-80,-140]])+'" fill="#cf9a7c"/>';         // nose
+  g += '<path d="'+smooth([[hc[0]-50,-240],[hc[0]+10,-262],[hc[0]+80,-215],[hc[0]+92,-150],[hc[0]+70,-95],[hc[0]+40,-130],[hc[0]+20,-200]])+'" fill="#2a2018"/>';
+  g += '<ellipse cx="'+VX(hc[0]+100)+'" cy="'+(hc[1]-30)+'" rx="30" ry="26" fill="#1f1812"/>';           // bun
+  g += '<ellipse cx="'+VX(hc[0]+10)+'" cy="'+(hc[1]+5)+'" rx="12" ry="18" fill="#b98063"/>';             // ear
+  var arm = s.arms==="up" ? [[128,48],[142,-60],[156,-292],[170,-326],[204,-322],[210,-290],[190,-60],[186,44]]
+          : s.arms==="hips" ? [[96,40],[52,190],[120,340],[160,332],[100,196],[164,44]]
+          : [[96,40],[98,200],[104,330],[110,430],[150,434],[160,330],[164,200],[168,40]];
+  g += '<path d="'+smooth(arm)+'" fill="#cf9a7c" stroke="#a87458" stroke-width="2"/>';
+  g += '<path d="'+smooth([arm[0], arm[1], [arm[1][0]+30, arm[1][1]+(s.arms==="up"?50:-20)], arm[arm.length-1]])+'" fill="url(#xrGown)"/>';
+  if(s.arms==="up") g += '<path d="'+smooth([[60,-352],[130,-366],[214,-338],[210,-310],[130,-328],[64,-322]])+'" fill="#c48e70" stroke="#a87458" stroke-width="2"/>';
+  return g;
+}
+function landmarks(){
+  var s=cur().set, L=[];
+  if(S.proj==="pa"){
+    var mid=CAL.pa.mid;
+    if(s.face!=="ap"){
+      L.push([mid, -6, "C7 · vertebra prominens"]);
+      var ia = s.arms==="hips" ? 104 : 84;
+      L.push([mid-ia, 176, "inferior angle of scapula", -18], [mid+ia, 176, ""]);
+      L.push([mid, 168, "T7 spinous process", 30]);
+    } else {
+      L.push([mid, 22, "jugular notch"], [mid, 70, "sternal angle (T4/5)"], [mid, 236, "xiphisternum"]);
+    }
+  } else {
+    L.push([34, 74, "jugular notch"], [226, 186, "inferior angle of scapula"], [130, 30, "mid-axillary line ↓"], [130, 330, ""]);
+  }
+  return L;
+}
+var drag=null;
+function drawLF(){
+  var P=cur(), v=PROJ[S.proj].view, f=P.field, mir=mirrored();
+  svg.setAttribute("viewBox", v.x0+" "+v.y0+" "+v.s+" "+v.s);
+  var x0=f.cx-f.w/2, x1=f.cx+f.w/2, y0=f.cy-f.h/2, y1=f.cy+f.h/2;
+  var vx0=Math.min(VX(x0), VX(x1)), vx1=Math.max(VX(x0), VX(x1)), cx=VX(f.cx);
+  var h = '<defs><pattern id="xrGown" width="24" height="24" patternUnits="userSpaceOnUse"><rect width="24" height="24" fill="#a9c8d8"/><path d="M12 7 l5 5 -5 5 -5 -5Z" fill="#8fb3c8"/></pattern>'+
+          '<radialGradient id="xrRoom" cx="50%" cy="40%" r="70%"><stop offset="0" stop-color="#d9dedb"/><stop offset="1" stop-color="#9aa29d"/></radialGradient></defs>';
+  h += '<rect x="'+v.x0+'" y="'+v.y0+'" width="'+v.s+'" height="'+v.s+'" fill="url(#xrRoom)"/>';
+  // detector housing behind the patient (centred on the central ray)
+  h += '<rect x="'+(cx-300)+'" y="'+(f.cy-300)+'" width="600" height="600" rx="24" fill="#eef0ee" stroke="#b4bbc0" stroke-width="3"/>';
+  h += '<rect x="'+(cx-250)+'" y="'+(f.cy-250)+'" width="500" height="500" fill="#2e3338"/>';
+  h += '<rect x="'+(cx-215)+'" y="'+(f.cy-215)+'" width="430" height="430" fill="none" stroke="rgba(235,240,245,.35)" stroke-width="2" stroke-dasharray="8 6"/>';
+  h += S.proj==="pa" ? bodyPA() : bodyLAT();
+  if(S.showAec){
+    [[-85,-55],[85,-55],[0,25]].forEach(function(c){ h += '<rect x="'+(cx+c[0]-28)+'" y="'+(f.cy+c[1]-38)+'" width="56" height="76" fill="none" stroke="rgba(255,236,150,.85)" stroke-width="2.5" stroke-dasharray="7 5"/>'; });
+  }
+  // light: dim the room outside the field, warm the field, cross-wire shadows
+  h += '<path d="M'+v.x0+' '+v.y0+' h'+v.s+' v'+v.s+' h-'+v.s+'Z M'+vx0+' '+y0+' V'+y1+' H'+vx1+' V'+y0+'Z" fill="rgba(6,8,6,.5)" fill-rule="evenodd" pointer-events="none"/>';
+  h += '<rect x="'+vx0+'" y="'+y0+'" width="'+(vx1-vx0)+'" height="'+(y1-y0)+'" fill="rgba(255,236,190,.16)" stroke="rgba(255,244,214,.9)" stroke-width="2" pointer-events="none"/>';
+  h += '<path d="M'+vx0+' '+f.cy+' H'+vx1+' M'+cx+' '+y0+' V'+y1+'" stroke="rgba(20,16,10,.75)" stroke-width="2.5" pointer-events="none"/>';
+  h += '<rect id="xrMove" x="'+vx0+'" y="'+y0+'" width="'+(vx1-vx0)+'" height="'+(y1-y0)+'" fill="transparent" style="cursor:move"/>';
+  // edge handles (symmetric collimator blades)
+  [["l", vx0, f.cy, "ew"], ["r", vx1, f.cy, "ew"], ["t", cx, y0, "ns"], ["b", cx, y1, "ns"]].forEach(function(e){
+    var horiz = e[3]==="ew";
+    h += '<rect data-e="'+e[0]+'" x="'+(e[1]-(horiz?14:40))+'" y="'+(e[2]-(horiz?40:14))+'" width="'+(horiz?28:80)+'" height="'+(horiz?80:28)+'" fill="transparent" style="cursor:'+e[3]+'-resize"/>';
+    h += '<rect x="'+(e[1]-(horiz?4:22))+'" y="'+(e[2]-(horiz?22:4))+'" width="'+(horiz?8:44)+'" height="'+(horiz?44:8)+'" rx="3" fill="#ffd38a" pointer-events="none"/>';
+  });
+  h += '<text x="'+(vx0+6)+'" y="'+(y0-8)+'" font-family="ui-monospace,monospace" font-size="17" fill="#ffe6b0" stroke="#000" stroke-width="3" paint-order="stroke">'+(f.w/10).toFixed(1)+' × '+(f.h/10).toFixed(1)+' cm</text>';
+  if(S.palp) landmarks().forEach(function(m){
+    h += '<circle cx="'+VX(m[0])+'" cy="'+m[1]+'" r="7" fill="#ff5a4a" stroke="#fff" stroke-width="2" pointer-events="none"/>';
+    if(m[2]) h += '<text x="'+(VX(m[0])+12)+'" y="'+(m[1]+5+(m[3]||0))+'" font-family="ui-monospace,monospace" font-size="15" fill="#fff" stroke="#000" stroke-width="3.5" paint-order="stroke" pointer-events="none">'+m[2]+'</text>';
+  });
+  if(S.palp && S.proj==="lat") h += '<path d="M'+VX(130)+' 30 V330" stroke="#ff5a4a" stroke-width="2" stroke-dasharray="6 6" pointer-events="none"/>';
+  // marker
+  if(P.marker){
+    var mx=VX(P.marker.x), my=P.marker.y;
+    h += '<g class="xr-mk" id="xrMk"><rect x="'+(mx-16)+'" y="'+(my-16)+'" width="32" height="32" rx="5" fill="#d23c2e" stroke="#fff" stroke-width="2"/>'+
+         '<text x="'+mx+'" y="'+(my+9)+'" text-anchor="middle" font-family="Trebuchet MS,sans-serif" font-weight="700" font-size="26" fill="#fff">'+P.marker.l+'</text></g>';
+  }
+  // orientation captions (unmirrored text)
+  var lab = S.proj==="pa" ? (mir ? ["patient's LEFT", "patient's RIGHT"] : ["patient's RIGHT", "patient's LEFT"]) : (mir ? ["POSTERIOR", "ANTERIOR"] : ["ANTERIOR", "POSTERIOR"]);
+  h += '<text x="'+(v.x0+14)+'" y="'+(v.y0+v.s/2+6)+'" font-family="ui-monospace,monospace" font-size="16" fill="#e8ece9" stroke="#000" stroke-width="3" paint-order="stroke">◂ '+lab[0]+'</text>';
+  h += '<text x="'+(v.x0+v.s-14)+'" y="'+(v.y0+v.s/2+6)+'" text-anchor="end" font-family="ui-monospace,monospace" font-size="16" fill="#e8ece9" stroke="#000" stroke-width="3" paint-order="stroke">'+lab[1]+' ▸</text>';
+  svg.innerHTML = h;
+  info.textContent = "LIGHT BEAM · "+PROJ[S.proj].name+"\nview from the tube side";
+  info2.textContent = (S.proj==="pa" ? (mir ? "you see her BACK" : "you see her FRONT") : (mir ? "you see her RIGHT side" : "you see her LEFT side"));
+}
+function svgPt(e){ var p=svg.createSVGPoint(); p.x=e.clientX; p.y=e.clientY; var q=p.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; }
+function unVX(x){ return VX(x); }        // the mirror is its own inverse
+svg.addEventListener("pointerdown", function(e){
+  if(S.phase!=="centre") return;
+  var t=e.target, P=cur(), p=svgPt(e), fx=unVX(p[0]), fy=p[1];
+  if(t.closest && t.closest("#xrMk")) drag={ k:"mk", ox:P.marker.x-fx, oy:P.marker.y-fy };
+  else if(t.dataset && t.dataset.e) drag={ k:t.dataset.e };
+  else if(t.id==="xrMove") drag={ k:"move", ox:P.field.cx-fx, oy:P.field.cy-fy };
+  else return;
+  svg.setPointerCapture(e.pointerId); e.preventDefault();
+});
+svg.addEventListener("pointermove", function(e){
+  if(!drag) return;
+  var P=cur(), f=P.field, p=svgPt(e), fx=unVX(p[0]), fy=p[1];
+  if(drag.k==="move"){ f.cx=Math.round(fx+drag.ox); f.cy=Math.round(fy+drag.oy); }
+  else if(drag.k==="mk"){ P.marker.x=Math.round(fx+drag.ox); P.marker.y=Math.round(fy+drag.oy); }
+  else if(drag.k==="l"||drag.k==="r") f.w=clampF(2*Math.abs(fx-f.cx));
+  else f.h=clampF(2*Math.abs(fy-f.cy));
+  drawLF(); render();
+});
+function endDrag(){ if(drag){ drag=null; var f=cur().field; log("Field "+(f.w/10).toFixed(1)+" × "+(f.h/10).toFixed(1)+" cm.", "sys"); } }
+svg.addEventListener("pointerup", endDrag); svg.addEventListener("pointercancel", endDrag);
+function clampF(v){ return Math.max(80, Math.min(430, Math.round(v/5)*5)); }
+function dropMarker(l){
+  var P=cur(), f=P.field;
+  if(!P.marker) P.marker={ l:l, x:Math.round(f.cx + (mirrored()?-1:1)*(f.w/2-30)), y:Math.round(f.cy - f.h/2 + 30) };
+  else P.marker.l=l;
+  log("Lead marker <b>"+l+"</b> on the detector.", "sys"); drawLF(); render();
+}
+function renderLfTools(){
+  lfTools.innerHTML = '<button type="button" data-t="palp" class="'+(S.palp?"is-on":"")+'">✋ PALPATE</button><button type="button" data-t="aec" class="'+(S.showAec?"is-on":"")+'">▢ AEC</button>';
+  Array.prototype.forEach.call(lfTools.querySelectorAll("button"), function(b){ b.addEventListener("click", function(){
+    if(b.dataset.t==="palp") S.palp=!S.palp; else S.showAec=!S.showAec; renderLfTools(); drawLF(); }); });
+}
+
+/* =============================================================
+   FLOW
+   ============================================================= */
+function gotoReq(){ setPhase("req"); init3D(); syncRoom(); log("New request: PA and lateral chest. Check it, prepare the patient.", "sys"); }
+function startProj(p){
+  if(p==="pa"){ var miss=CHECKS.filter(function(c){ return !S.checks[c.id]; }); if(miss.length) log("Not done: "+miss.map(function(c){ return c.t.toLowerCase(); }).join("; ")+".", "warn"); }
+  S.proj=p; setPhase("setup"); syncRoom();
+  log(p==="pa" ? "PA chest: bring the patient to the erect stand and position her." : "Lateral: re-position her for the left lateral.", "sys");
+}
+function gotoCentre(){ setPhase("centre"); renderLfTools(); drawLF(); log("Light beam on. Put the cross-wires on the spot and collimate.", "sys"); }
+function gotoExpose(){
+  var P=cur(); if(!P.marker){ log("Place a marker first.", "warn"); return; }
+  setPhase("expose"); syncRoom(); log("At the console. Set the exposure and give the breathing instruction.", "sys");
+}
+function goBack(){ if(S.phase==="centre"){ setPhase("setup"); syncRoom(); } else if(S.phase==="expose"){ gotoCentre(); } }
+
+/* exposure physics (deliberately simple):
+   detector signal S = mAs/mAs0 · (kV/kV0)^4 · (180/SID)^2 · (grid ? 1 : 2.2);  DI = 10·log10(S);  EI = 400·S */
+function computeExposure(){
+  var P=cur(), e=P.expo, sid=P.set.sid||180, ref=EXPO[S.proj], kf=Math.pow(e.kv/ref.kv, 4)*Math.pow(180/sid, 2)*(e.grid?1:2.2), di, mas;
+  if(e.aec){
+    var c=e.ch;
+    if(S.proj==="pa") di = c.c ? (c.l||c.r ? 1.6 : 3.2) : 0;
+    else di = c.c ? (c.l||c.r ? 0.6 : 0) : 1.2;
+    di += (Math.random()-0.5)*0.5;
+    mas = ref.mas*Math.pow(10, di/10)/kf;
+    mas = Math.round(mas*100)/100;
+  } else { mas=e.mas; di = 10*Math.log10(mas/ref.mas*kf); }
+  var area=(P.field.w/10)*(P.field.h/10);
+  var dap = 0.00005*mas*Math.pow(e.kv/120, 2)*area*Math.pow(180/sid, 2)*(e.grid?1:0.55)*(S.proj==="lat"?1:1);
+  return { di:Math.round(di*10)/10, mas:mas, kv:e.kv, ei:Math.round(400*Math.pow(10, di/10)), dap:dap };
+}
+function expose(){
+  var P=cur(), e=P.expo;
+  if(!e.breath){ log("Give a breathing instruction first.", "warn"); return; }
+  if(e.aec && !chCount()){ log("Select at least one AEC chamber.", "warn"); return; }
+  S.busy=true; renderCmds();
+  var ex=computeExposure(), shot={ kv:ex.kv, mas:ex.mas, di:ex.di, ei:ex.ei, dap:ex.dap,
+    set:JSON.parse(JSON.stringify(P.set)), field:JSON.parse(JSON.stringify(P.field)), marker:JSON.parse(JSON.stringify(P.marker)),
+    expo:JSON.parse(JSON.stringify(e)), checks:JSON.parse(JSON.stringify(S.checks)), seed:Math.floor(Math.random()*1e6) };
+  holdEl.innerHTML = e.breath==="in" ? "DEEP BREATH IN… AND HOLD<small>exposing</small>" : (e.breath==="out" ? "BREATHE OUT… AND HOLD<small>exposing</small>" : "EXPOSING<small>(no instruction given)</small>");
+  holdEl.classList.remove("scg-hidden");
+  log("☢ Exposure: "+ex.kv+" kV, "+ex.mas+" mAs"+(e.aec?" (AEC)":"")+".", "ok");
+  setTimeout(function(){
+    flashEl.classList.remove("is-on"); void flashEl.offsetWidth; flashEl.classList.add("is-on");
+    var done=function(){
+      holdEl.classList.add("scg-hidden");
+      acqEl.classList.remove("scg-hidden"); acqTitle.textContent="PROCESSING"; acqNum.textContent=PROJ[S.proj].long+" · DR";
+      loadFilms(function(){
+        shot.cv = renderShot(S.proj, shot);
+        P.shots.push(shot); S.dose += shot.dap;
+        acqEl.classList.add("scg-hidden"); S.busy=false;
+        setPhase("review"); showShot(shot);
+        log("Image ready — DI "+(shot.di>=0?"+":"")+shot.di.toFixed(1)+", EI "+shot.ei+".", Math.abs(shot.di)>2?"warn":"ok");
+      });
+    };
+    var fired=false; function once(){ if(!fired){ fired=true; setTimeout(done, 300); } }
+    if(room3d) room3d.expose(once);
+    setTimeout(once, 1600);                         // don't wait on the 3-D flash if the page isn't drawing
+  }, 1300);
+}
+function accept(){
+  var P=cur(); P.accepted=true;
+  var g=gradeShot(S.proj, P.shots[P.shots.length-1]);
+  if(P.shots.length===1 && g.score>=45) S.firstGood[S.proj]=true;
+  log(PROJ[S.proj].long+" accepted.", "ok");
+  if(S.proj==="pa") startProj("lat"); else showResult();
+}
+function repeatShot(){
+  var P=cur(); S.repeats++;
+  log("Repeat requested — re-position and expose again (extra dose).", "warn");
+  setPhase("setup"); syncRoom();
+}
+
+/* =============================================================
+   IMAGE SYNTHESIS — the real film, re-projected through the user's set-up
+   ============================================================= */
+var FILM={};
+function loadFilms(cb){
+  var need=["pa_x", "lat_x"].filter(function(n){ return !FILM[n]; }), left=need.length;
+  if(!left){ cb(); return; }
+  need.forEach(function(n){
+    var im=new Image(); im.onload=function(){
+      var c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight;
+      var g=c.getContext("2d"); g.drawImage(im, 0, 0);
+      var d=g.getImageData(0, 0, c.width, c.height).data, a=new Uint8Array(c.width*c.height);
+      for(var i=0;i<a.length;i++) a[i]=d[i*4];
+      FILM[n]={ w:c.width, h:c.height, a:a };
+      if(--left===0) cb();
+    }; im.src=url(n);
+  });
+}
+function rng(seed){ var s=seed>>>0; return function(){ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
+function renderShot(p, sh){
+  var C=CAL[p], F=FILM[p+"_x"], k=3, f=sh.field, W=Math.round(f.w*k), H=Math.round(f.h*k);
+  var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  var g=cv.getContext("2d"), img=g.createImageData(W, H), out=new Float32Array(W*H);
+  var set=sh.set, e=sh.expo, sid=set.sid||180, pad=C.pad, mm=C.mmpp;
+  // magnification relative to the reference film (PA / left lateral at 180 cm)
+  function mag(oid){ return sid/(sid - oid); }
+  var ap = p==="pa" && set.face==="ap", rl = p==="lat" && set.side==="R";
+  var mBody = mag(ap ? 14 : 11)/(180/(180-11));
+  var mHeart = (ap ? mag(17)/mag(6) : (rl ? mag(24)/mag(12) : mag(6)/(180/(180-6))))*(sh.expo.breath==="out" ? 1.07 : 1);
+  var Hc = C.heart, HR = C.heartR, ex = sh.expo.breath==="out", yH = C.hilum;
+  var cx=f.cx, cy=f.cy;
+  for(var j=0;j<H;j++){
+    var y=f.cy-f.h/2+(j+0.5)/k;
+    for(var i=0;i<W;i++){
+      var x=f.cx-f.w/2+(i+0.5)/k;
+      // whole-body magnification about the central ray
+      var sx=cx+(x-cx)/mBody, sy=cy+(y-cy)/mBody;
+      // heart magnification
+      var dx=sx-Hc[0], dy=sy-Hc[1], r2=(dx*dx+dy*dy)/(HR*HR);
+      if(r2<1){ var w=(1-r2)*(1-r2), s=1+(mHeart-1)*w; sx=Hc[0]+dx/s; sy=Hc[1]+dy/s; }
+      // expiration: diaphragms ride up
+      if(ex && sy>yH) sy = yH + (sy-yH)*1.16;
+      // bilinear sample from the padded film
+      var px=(sx/mm)+pad, py=(sy/mm)+pad, x0=Math.floor(px), y0=Math.floor(py), fx=px-x0, fy=py-y0, v;
+      if(x0<0||y0<0||x0>=F.w-1||y0>=F.h-1) v=20;
+      else { var o=y0*F.w+x0, a=F.a; v=(a[o]*(1-fx)+a[o+1]*fx)*(1-fy)+(a[o+F.w]*(1-fx)+a[o+F.w+1]*fx)*fy; }
+      out[j*W+i]=v;
+    }
+  }
+  // simulated overlying anatomy / foreign bodies (drawn as added density)
+  var ov=document.createElement("canvas"); ov.width=W; ov.height=H; var og=ov.getContext("2d");
+  og.setTransform(k, 0, 0, k, -(f.cx-f.w/2)*k, -(f.cy-f.h/2)*k);
+  function poly(pts, alpha, blur){ og.filter="blur("+(blur*k)+"px)"; og.fillStyle="rgba(255,255,255,"+alpha+")"; og.beginPath(); pts.forEach(function(q, i){ i?og.lineTo(q[0], q[1]):og.moveTo(q[0], q[1]); }); og.closePath(); og.fill(); }
+  var arms=set.arms;
+  if(p==="pa"){
+    var mid=C.mid;
+    if(arms!=="hips"||ap){                     // scapulae over the lateral lung fields
+      [-1, 1].forEach(function(s){ poly([[mid+s*66,40],[mid+s*82,120],[mid+s*96,178],[mid+s*130,150],[mid+s*150,70],[mid+s*125,38]].map(function(q){ return q; }), 0.12, 3);
+        og.filter="blur("+(1.2*k)+"px)"; og.strokeStyle="rgba(255,255,255,.22)"; og.lineWidth=2.2; og.beginPath(); og.moveTo(mid+s*66,40); og.lineTo(mid+s*82,120); og.lineTo(mid+s*96,178); og.stroke(); });
+    }
+    if(arms==="up"){ [-1, 1].forEach(function(s){ poly([[mid+s*120,-60],[mid+s*170,-60],[mid+s*175,40],[mid+s*140,70]], 0.18, 6); }); }
+    if(set.chin==="down"){ og.filter="blur("+(4*k)+"px)"; og.strokeStyle="rgba(255,255,255,.3)"; og.lineWidth=16; og.beginPath(); og.ellipse(mid, -40, 70, 62, 0, 0.15*Math.PI, 0.85*Math.PI); og.stroke(); }
+  } else {
+    if(arms==="side") poly([[92,0],[150,-4],[166,260],[108,262]], 0.2, 5);
+    if(arms==="hips") poly([[90,0],[150,0],[110,200],[60,190]], 0.2, 5);
+  }
+  if(!sh.checks.neck){ var nc=p==="pa" ? [C.mid, 30] : [55, 70], nr=p==="pa" ? 52 : 26;
+    og.filter="none"; og.fillStyle="rgba(255,255,255,.95)";
+    for(var b=0;b<=26;b++){ var t=Math.PI*(0.12+0.76*b/26); og.beginPath(); og.arc(nc[0]+nr*Math.cos(t)*(p==="pa"?1:0.5), nc[1]+nr*0.85*Math.sin(t), 1.5, 0, 7); og.fill(); }
+    og.beginPath(); og.arc(nc[0], nc[1]+nr*0.85+4, 4, 0, 7); og.fill(); }
+  if(!sh.checks.gown){ og.filter="none"; og.fillStyle="rgba(255,255,255,.9)";
+    var hk = p==="pa" ? [[C.mid-8,150],[C.mid+8,150],[C.mid-8,156],[C.mid+8,156]] : [[236,150],[236,158]];
+    hk.forEach(function(q){ og.fillRect(q[0]-3, q[1]-1.5, 6, 3); });
+    og.strokeStyle="rgba(255,255,255,.35)"; og.lineWidth=1.4; og.filter="blur(1px)";
+    if(p==="pa") [-1, 1].forEach(function(s){ og.beginPath(); og.ellipse(C.mid+s*70, 222, 55, 30, 0, 0.1, Math.PI-0.1); og.stroke(); });
+  }
+  if(!sh.checks.hair){ og.filter="blur("+(2*k)+"px)"; og.fillStyle="rgba(255,255,255,.16)";
+    var hx = p==="pa" ? C.mid+18 : 205;
+    og.beginPath(); og.ellipse(hx, 30, 14, 70, 0.08, 0, 7); og.fill(); }
+  var od=og.getImageData(0, 0, W, H).data;
+  // exposure: contrast (kV, grid), noise (under), burn-out (over)
+  var kc=Math.pow(120/e.kv, 0.6)*(e.grid?1:0.78), fog=e.grid?0:16, R=rng(sh.seed);
+  var sig=1.6+(sh.di<0 ? 3.6*(-sh.di) : 0), over=Math.max(0, sh.di-1.5);
+  var meanV=118;
+  for(var q=0;q<out.length;q++){
+    var v=out[q] + od[q*4+3]*od[q*4]/255*0.55;
+    v = meanV + (v-meanV)*kc + fog;
+    if(over>0){ v -= over*9*(1 - v/255); if(v<38+over*5) v=Math.max(0, v-(38+over*5-v)*0.9); }
+    var n=(R()+R()+R()-1.5)*2*sig; v+=n;
+    out[q]=v;
+  }
+  // breathing motion: vertical smear over the heart and diaphragms
+  if(e.breath==="none"){
+    var tmp=out.slice(), L=Math.round(2.2*k);
+    for(var jj=0;jj<H;jj++){ var yy=f.cy-f.h/2+jj/k, wgt=Math.max(0, Math.min(1, (yy-C.hilum+40)/80));
+      if(wgt<=0) continue;
+      for(var ii=0;ii<W;ii++){ var acc=0, cnt=0; for(var d=-L; d<=L; d++){ var j2=Math.max(0, Math.min(H-1, jj+d)); acc+=tmp[j2*W+ii]; cnt++; }
+        out[jj*W+ii]=tmp[jj*W+ii]*(1-wgt)+acc/cnt*wgt; } }
+  }
+  var D=img.data;
+  for(var z=0;z<out.length;z++){ var c=Math.max(0, Math.min(255, out[z])); D[z*4]=D[z*4+1]=D[z*4+2]=c; D[z*4+3]=255; }
+  g.putImageData(img, 0, 0);
+  // the lead marker (on the detector: no magnification)
+  if(sh.marker){
+    var m=sh.marker, mx=(m.x-(f.cx-f.w/2))*k, my=(m.y-(f.cy-f.h/2))*k;
+    if(mx>-20 && my>-20 && mx<W+20 && my<H+20){
+      g.fillStyle="rgba(200,200,200,.35)"; g.fillRect(mx-9*k, my-9*k, 18*k, 18*k);
+      g.fillStyle="#fff"; g.font="bold "+(14*k)+"px Arial, sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(m.l, mx, my+0.5*k);
+    }
+  }
+  return cv;
+}
+var VIEW={ shot:null };
+function showShot(sh, label){
+  VIEW.shot=sh;
+  var c=sh.cv, s=Math.min(1, 1400/Math.max(c.width, c.height));
+  viewCv.width=Math.round(c.width*s); viewCv.height=Math.round(c.height*s);
+  var g=viewCv.getContext("2d"); g.drawImage(c, 0, 0, viewCv.width, viewCv.height);
+  var p=label || S.proj;
+  info.textContent = (p==="pa" ? (sh.set.face==="ap" ? "AP ERECT" : "PA ERECT") : (sh.set.side==="R" ? "R LATERAL" : "L LATERAL"))+"\n"+sh.kv+" kV  "+sh.mas+" mAs"+(sh.expo.aec?" AEC":"")+"  SID "+(sh.set.sid||180)+"\nEI "+sh.ei+"  DI "+(sh.di>=0?"+":"")+sh.di.toFixed(1);
+  info2.textContent = (sh.field.w/10).toFixed(1)+" × "+(sh.field.h/10).toFixed(1)+" cm\nDAP "+sh.dap.toFixed(3)+" Gy·cm²";
+}
+
+/* =============================================================
+   GRADING
+   ============================================================= */
+function fieldEdges(f){ return { l:f.cx-f.w/2, r:f.cx+f.w/2, t:f.cy-f.h/2, b:f.cy+f.h/2 }; }
+function gradeShot(p, sh){
+  var C=CAL[p], set=sh.set, rows=[], score=0, crit=[];
+  function row(st, title, pts, max, note){ rows.push({ st:st, t:title, pts:pts, max:max, n:note }); score+=pts; }
+  if(p==="pa"){
+    row(set.face==="pa"?"ok":"bad", "Projection", set.face==="pa"?5:0, 5, set.face==="pa" ? "PA, facing the detector." : "AP: the heart is further from the detector and magnified (here ≈ "+Math.round((magHeart(p, sh)-1)*100)+"% larger), and the scapulae stay over the lungs.");
+    row(set.arms==="hips"?"ok":"bad", "Arms / scapulae", set.arms==="hips"?5:0, 5, set.arms==="hips" ? "Hands on hips, elbows forward: scapulae rotated clear of the lungs." : "The scapulae project over the lateral lung fields (simulated on your image).");
+    row(set.chin==="up"?"ok":"warn", "Chin", set.chin==="up"?4:1, 4, set.chin==="up" ? "Chin raised clear of the apices." : "Chin down: the jaw overlies the upper airway / apices.");
+  } else {
+    row(set.side==="L"?"ok":"warn", "Side to the detector", set.side==="L"?5:2, 5, set.side==="L" ? "Left lateral: heart closest to the detector, and her symptomatic side." : "Right lateral: heart magnified; the left side (her painful side) is further from the detector.");
+    row(set.arms==="up"?"ok":"bad", "Arms", set.arms==="up"?9:0, 9, set.arms==="up" ? "Arms raised clear of the thorax." : "The humeri / soft tissue project over the upper chest (simulated on your image).");
+  }
+  var sid=set.sid||180;
+  row(sid===180?"ok":(sid===150?"warn":"bad"), "SID", sid===180?4:(sid===150?2:0), 4, sid===180 ? "180 cm." : sid+" cm — more magnification of the heart and mediastinum.");
+  // centring
+  var ref=C.ref, ex=sh.field.cx-ref[0], ey=sh.field.cy-ref[1], cent=Math.abs(ex)<=C.tol[0] && Math.abs(ey)<=C.tol[1], near=Math.abs(ex)<=C.tol[0]*2 && Math.abs(ey)<=C.tol[1]*2;
+  var where = (p==="pa" ? "midline at T7 (the inferior angles of the scapulae)" : "mid-axillary line at T7 (≈10 cm below the jugular notch)");
+  row(cent?"ok":(near?"warn":"bad"), "Centring", cent?8:(near?4:0), 8, (cent ? "On the spot: " : "Off by "+Math.round(Math.hypot(ex, ey)/10*10)/10+" cm ("+dirTxt(p, ex, ey)+"). Aim for the ")+where+".");
+  // collimation
+  var e=fieldEdges(sh.field), n=C.need, o=C.over, miss=[], overs=[];
+  if(e.t>n.t) miss.push(p==="pa"?"lung apices":"apices");
+  if(e.b<n.b) miss.push(p==="pa"?"costophrenic angles":"posterior costophrenic recesses");
+  if(e.l>n.l) miss.push(p==="pa"?"right lateral rib margin":"anterior chest wall");
+  if(e.r<n.r) miss.push(p==="pa"?"left lateral rib margin":"posterior ribs / spine");
+  if(e.t<o.t) overs.push(p==="pa"?"neck / thyroid":"neck"); if(e.b>o.b) overs.push("upper abdomen");
+  if(e.l<o.l||e.r>o.r) overs.push(p==="pa"?"arms / beyond the skin":"beyond the skin");
+  var cpts = (miss.length?0:6) + (overs.length?0:3);
+  row(miss.length?"bad":(overs.length?"warn":"ok"), "Collimation", cpts, 9, (miss.length ? "Cut off: "+miss.join(", ")+". " : "All required anatomy included. ")+(overs.length ? "Too wide — extra dose to the "+overs.join(", ")+"." : (miss.length?"":"Tight and complete.")));
+  // marker
+  var m=sh.marker, mst="ok", mpts=4, mtx="";
+  var inF = m && m.x>e.l+4 && m.x<e.r-4 && m.y>e.t+4 && m.y<e.b-4;
+  var correctL = p==="pa" ? (m && ((m.l==="L" && m.x>C.mid) || (m.l==="R" && m.x<C.mid))) : (m && m.l===(set.side||"L"));
+  var overAnat = m && C.lungBox && m.x>C.lungBox[0] && m.x<C.lungBox[2] && m.y>C.lungBox[1] && m.y<C.lungBox[3];
+  if(!m){ mst="bad"; mpts=0; mtx="No marker."; }
+  else if(!inF){ mst="bad"; mpts=0; mtx="The marker is outside the collimated field — it won't be on the image."; }
+  else if(!correctL){ mst="bad"; mpts=0; mtx = p==="pa" ? "Wrong side: '"+m.l+"' is on the patient's "+(m.x>C.mid?"left":"right")+"." : "Use the marker for the side against the detector (L for a left lateral)."; }
+  else if(overAnat){ mst="warn"; mpts=2; mtx="Correct, but it overlies the lungs — keep it clear of anatomy."; }
+  else mtx="'"+m.l+"' correct, inside the field, clear of anatomy.";
+  row(mst, "Anatomical marker", mpts, 4, mtx);
+  // exposure
+  var di=sh.di, ad=Math.abs(di);
+  row(ad<=1?"ok":(ad<=2.5?"warn":"bad"), "Exposure (DI)", ad<=1?5:(ad<=2.5?2:0), 5, "DI "+(di>=0?"+":"")+di.toFixed(1)+(ad<=1 ? " — within target." : di<0 ? " — underexposed: quantum mottle / noise." : " — overexposed: unnecessary dose; lung detail burnt out at the extreme.")+(sh.expo.aec ? aecNote(p, sh.expo.ch) : ""));
+  var kv=sh.kv;
+  row(kv>=100&&kv<=130?"ok":(kv>=90&&kv<=140?"warn":"bad"), "kV", kv>=100&&kv<=130?3:(kv>=90&&kv<=140?1:0), 3, kv+" kV — "+(kv>=100&&kv<=130 ? "high kV gives wide latitude: lungs, mediastinum and spine in one image." : kv<100 ? "low for a chest: high contrast, ribs obscure lung, more dose." : "very high: low contrast."));
+  row(sh.expo.grid?"ok":"warn", "Grid", sh.expo.grid?2:0, 2, sh.expo.grid ? "Grid in — scatter removed." : "No grid at high kV: scatter fogs the image.");
+  var br=sh.expo.breath;
+  row(br==="in"?"ok":"bad", "Breathing", br==="in"?5:0, 5, br==="in" ? "Full inspiration, held." : br==="out" ? "Expiration: diaphragms high, lungs look small and the heart broad (simulated)." : "No instruction — breathing motion blur over the heart and diaphragms (simulated).");
+  var chk=CHECKS.filter(function(c){ return !sh.checks[c.id]; });
+  var cp = chk.length===0 ? 5 : Math.max(0, 5-2*chk.length);
+  row(chk.length?"warn":"ok", "Pre-exposure checks", cp, 5, chk.length ? "Missed: "+chk.map(function(c){ return c.t.toLowerCase(); }).join("; ")+"." : "ID, justification and preparation complete.");
+  return { rows:rows, score:Math.min(50, score) };
+}
+function aecNote(p, c){
+  if(p==="pa") return c.c ? " AEC: the centre chamber sits over the spine and mediastinum, so the lungs are overexposed — use the two outer (lung) chambers." : " AEC: outer chambers over the lungs — correct.";
+  return c.c && !(c.l||c.r) ? " AEC: centre chamber — correct for the lateral." : " AEC: use the centre chamber for the lateral.";
+}
+function dirTxt(p, ex, ey){
+  var a=[];
+  if(Math.abs(ey)>5) a.push(ey<0 ? "too high" : "too low");
+  if(Math.abs(ex)>5) a.push(p==="pa" ? (ex<0 ? "toward her right" : "toward her left") : (ex<0 ? "too anterior" : "too posterior"));
+  return a.join(", ") || "close";
+}
+function magHeart(p, sh){ var sid=sh.set.sid||180; return sh.set.face==="ap" ? (sid/(sid-17))/(sid/(sid-6)) : 1; }
+
+/* =============================================================
+   RESULT
+   ============================================================= */
+function showResult(){
+  setPhase("result");
+  var shots={ pa:S.pa.shots[S.pa.shots.length-1], lat:S.lat.shots[S.lat.shots.length-1] };
+  var G={ pa:gradeShot("pa", shots.pa), lat:gradeShot("lat", shots.lat) };
+  var total=G.pa.score+G.lat.score - 5*S.repeats; total=Math.max(0, total);
+  var marker = S.repeats===0 && S.firstGood.pa && S.firstGood.lat;
+  showShot(shots.pa, "pa");
+  var cls = total>=85 ? "" : (total>=60 ? " is-warn" : " is-bad");
+  function rowsHtml(g){ return g.rows.map(function(r){
+    return '<div class="scg-drow"><i class="scg-d-'+r.st+'">'+(r.st==="ok"?"✓":(r.st==="warn"?"!":"✕"))+'</i><div style="flex:1"><b>'+r.t+'</b><em>'+r.pts+' / '+r.max+'</em><p>'+r.n+'</p></div></div>'; }).join(""); }
+  var h = '<div>'+
+    '<h2>Your films</h2><div class="scg-cap">The images you accepted, built from the real normal PA and lateral with your positioning, collimation, marker and exposure applied. Tap one to view it in the main viewer.</div>'+
+    '<div class="xr-heroes"><div class="scg-hero" data-p="pa" style="cursor:pointer"><div class="scg-hero-lab">'+(shots.pa.set.face==="ap"?"AP":"PA")+'</div></div><div class="scg-hero" data-p="lat" style="cursor:pointer"><div class="scg-hero-lab">LAT</div></div></div>'+
+    '<div class="xr-sub">Image criteria — what the radiologist checks</div>'+criteriaHtml(shots)+
+    '</div>'+
+    '<div class="scg-debrief">'+
+    '<div class="scg-grade'+cls+'"><b>'+total+'</b><span>out of 100<br>PA '+G.pa.score+' · LAT '+G.lat.score+(S.repeats?' · repeats −'+(5*S.repeats):'')+'<br>total DAP '+S.dose.toFixed(3)+' Gy·cm²</span></div>'+
+    '<div class="xr-sub">PA</div>'+rowsHtml(G.pa)+'<div class="xr-sub">Lateral</div>'+rowsHtml(G.lat)+
+    '<button class="scg-again" id="xrAgain" type="button">↺ Start again</button></div>'+
+    '<div class="scg-credits"><b>Adapted from:</b> Mikael Häggström, “Normal posteroanterior (PA) chest radiograph (X-ray).jpg” and “Normal lateral chest radiograph (X-ray).jpg”, Wikimedia Commons, 2017 — '+
+    '<a href="https://commons.wikimedia.org/wiki/File:Normal_posteroanterior_(PA)_chest_radiograph_(X-ray).jpg" target="_blank" rel="noopener">PA</a> · '+
+    '<a href="https://commons.wikimedia.org/wiki/File:Normal_lateral_chest_radiograph_(X-ray).jpg" target="_blank" rel="noopener">lateral</a>, released under '+
+    '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0</a> (a normal chest of a 21-year-old woman after a football collision). '+
+    '<b>Changes made:</b> converted to greyscale and resized (pixel spacing estimated at 0.25 mm); the burnt-in “Dx” / “Sin” labels on the PA were removed by inpainting; each film was extended by 8 cm with a blurred synthetic margin, seen only if you collimate wider than the original film; '+
+    'in your browser the films are cropped to your field, magnified for SID and AP / right-lateral set-ups, warped for expiration, and given simulated scapulae, arms, jaw, necklace, bra hooks, hair, breathing blur, noise / contrast for your exposure and your lead marker — none of these is a real finding. '+
+    'Exposure, DI and DAP use a simplified teaching model. The 3-D room is generic. Educational simulation — not a medical device, not for clinical use.</div>';
+  resultEl.innerHTML = h; resultEl.classList.remove("scg-hidden");
+  ["pa", "lat"].forEach(function(p){
+    var box=resultEl.querySelector('.scg-hero[data-p="'+p+'"]'), c=document.createElement("canvas"), src=shots[p].cv, s=Math.min(1, 520/src.width);
+    c.width=Math.round(src.width*s); c.height=Math.round(src.height*s); c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+    box.insertBefore(c, box.firstChild);
+    box.addEventListener("click", function(){ showShot(shots[p], p); });
+  });
+  $("xrAgain").addEventListener("click", resetAll);
+  if(marker){ achWrap.classList.remove("scg-hidden"); playAchievement(); log("Marker unlocked: <b>Get It Off Your Chest</b>.", "ok"); }
+  else log("Debrief ready"+(S.repeats?" — "+S.repeats+" repeat(s).":".")+" The marker needs both views diagnostic first time (45+/50 each, no repeats).", "sys");
+  render();
+}
+function criteriaHtml(shots){
+  var pa=shots.pa, lat=shots.lat, e=fieldEdges(pa.field), n=CAL.pa.need, el=fieldEdges(lat.field), nl=CAL.lat.need;
+  var rows=[
+    [pa.expo.breath==="in", "<b>Inspiration</b> — 10 posterior ribs (6 anterior) above the right hemidiaphragm"],
+    [pa.set.face==="pa" && pa.set.arms==="hips", "<b>Scapulae</b> projected clear of the lung fields"],
+    [null, "<b>Rotation</b> — medial clavicle ends equidistant from the spinous processes (a true PA is a set-up skill: stand her square on to the stand)"],
+    [e.t<=n.t && e.b>=n.b && e.l<=n.l && e.r>=n.r, "<b>PA coverage</b> — apices, lateral rib margins and both costophrenic angles"],
+    [Math.abs(pa.di)<=1, "<b>Exposure</b> — vertebrae just visible through the heart; lung markings to the periphery"],
+    [lat.set.arms==="up", "<b>Lateral</b> — arms clear of the thorax"],
+    [el.t<=nl.t && el.b>=nl.b && el.l<=nl.l && el.r>=nl.r, "<b>Lateral coverage</b> — apices to the posterior costophrenic recesses, sternum to spine"],
+    [!!pa.marker && !!lat.marker, "<b>Markers</b> on both films"]
+  ];
+  return '<table class="xr-crit">'+rows.map(function(r){ return '<tr><td style="color:'+(r[0]===null?"var(--ink-faint)":(r[0]?"var(--accent)":"var(--warn)"))+'">'+(r[0]===null?"·":(r[0]?"✓":"!"))+'</td><td>'+r[1]+'</td></tr>'; }).join("")+'</table>';
+}
+
+/* =============================================================
+   CLI
+   ============================================================= */
+function parseCommand(raw){
+  var c=raw.trim().toLowerCase(); if(!c) return; logCmd(c);
+  var a=c.split(/\s+/), P=cur();
+  var hit=cmdList().filter(function(k){ return CMD[k].k===a[0]; })[0];
+  if(hit){ if(cmdEnabled(hit)) CMD[hit].go(); else log("Not yet — complete this step first.", "warn"); return; }
+  if(a[0]==="help"){ log("Commands: next · back · expose · accept · repeat · kv N · mas N · aec on|off · chambers l c r · grid on|off · sid 100|150|180 · breathe in|out|none · field W H (cm) · palpate · restart", "sys"); return; }
+  if(a[0]==="kv" && S.phase==="expose"){ P.expo.kv=Math.max(60, Math.min(150, +a[1]||P.expo.kv)); render(); return; }
+  if(a[0]==="mas" && S.phase==="expose"){ P.expo.mas=MAS_STEPS[nearestMas(+a[1]||P.expo.mas)]; P.expo.aec=false; render(); return; }
+  if(a[0]==="aec" && S.phase==="expose"){ P.expo.aec=a[1]!=="off"; render(); return; }
+  if(a[0]==="chambers" && S.phase==="expose"){ var s=a.slice(1).join(""); P.expo.ch={ l:s.indexOf("l")>=0, c:s.indexOf("c")>=0, r:s.indexOf("r")>=0 }; P.expo.aec=true; render(); return; }
+  if(a[0]==="grid" && S.phase==="expose"){ P.expo.grid=a[1]!=="off"&&a[1]!=="out"; render(); return; }
+  if(a[0]==="breathe" && S.phase==="expose"){ if(["in","out","none"].indexOf(a[1])>=0){ P.expo.breath=a[1]; render(); } return; }
+  if(a[0]==="sid" && S.phase==="setup"){ var v=+a[1]; if([100,150,180].indexOf(v)>=0) setChoice("sid", v); return; }
+  if(a[0]==="field" && S.phase==="centre"){ P.field.w=clampF((+a[1]||0)*10||P.field.w); P.field.h=clampF((+a[2]||0)*10||P.field.h); drawLF(); render(); return; }
+  if(a[0]==="palpate" && S.phase==="centre"){ S.palp=!S.palp; renderLfTools(); drawLF(); return; }
+  if(a[0]==="restart"){ resetAll(); return; }
+  log("Unknown command — try: help", "warn");
+}
+cliForm.addEventListener("submit", function(e){ e.preventDefault(); parseCommand(cli.value); cli.value=""; });
+
+function resetAll(){
+  S=freshState(); resultEl.classList.add("scg-hidden"); resultEl.innerHTML=""; achWrap.classList.add("scg-hidden");
+  logEl.innerHTML=""; gotoReq();
+}
+$("scgStart").addEventListener("click", function(){ titleEl.classList.add("scg-hidden"); gotoReq(); });
+
+/* debug hooks */
+window.__xr = { S:function(){ return S; }, cur:cur, setPhase:setPhase, startProj:startProj, gotoCentre:gotoCentre, gotoExpose:gotoExpose,
+  expose:expose, accept:accept, grade:gradeShot, showResult:showResult, parse:parseCommand, drawLF:drawLF,
+  ideal:function(){ var P=cur(), C=CAL[S.proj]; P.field={ cx:C.ref[0], cy:C.ref[1], w:C.ideal[0], h:C.ideal[1] }; P.marker={ l:S.proj==="pa"?"L":"L", x:C.mark[0], y:C.mark[1] }; render(); } };
+setPhase("title");
+})();
+</script>
+</body>
+</html>
