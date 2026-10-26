@@ -513,7 +513,7 @@
 
 /* ================= X MARKS THE SPOT · CHEST X-RAY additions ================= */
 #scg-root .scg-cli::before{content:"x-ray $"}
-#scg-root .scg-ach-marker::after{content:'X'}
+#scg-root .scg-ach-marker::after{content:'B'}
 #scg-root .xr-lf{position:absolute;inset:0;z-index:3;background:#0d0f0c}
 #scg-root .xr-lf svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none}
 #scg-root .xr-view{position:absolute;inset:0;z-index:3;background:#000}
@@ -633,12 +633,12 @@
         <div class="scg-ach-marker"></div>
         <div class="scg-ach-text">
           <div class="scg-ach-label">Marker Unlocked</div>
-          <div class="scg-ach-title">Get It Off Your Chest</div>
+          <div class="scg-ach-title">Bread and Butter</div>
           <div class="scg-ach-sub">Chest X-ray · PA and lateral, both diagnostic first time</div>
         </div>
         <button class="scg-ach-replay" id="scgAchReplay" type="button">Replay</button>
       </div>
-      <div class="scg-ach-share">Share your <strong>Get It Off Your Chest</strong> Marker achievement below!</div>
+      <div class="scg-ach-share">Share your <strong>Bread and Butter</strong> Marker achievement below!</div>
     </div>
 
     <section class="scg-result scg-hidden" id="scgResult"></section>
@@ -1443,7 +1443,7 @@ function showResult(){
     box.addEventListener("click", function(){ showShot(shots[p], p); });
   });
   $("xrAgain").addEventListener("click", resetAll);
-  if(marker){ achWrap.classList.remove("scg-hidden"); playAchievement(); log("Marker unlocked: <b>Get It Off Your Chest</b>.", "ok"); }
+  if(marker){ achWrap.classList.remove("scg-hidden"); playAchievement(); log("Marker unlocked: <b>Bread and Butter</b>.", "ok"); }
   else log("Debrief ready"+(S.repeats?" — "+S.repeats+" repeat(s).":".")+" The marker needs both views diagnostic first time (45+/50 each, no repeats).", "sys");
   render();
 }

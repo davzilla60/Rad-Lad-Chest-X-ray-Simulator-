@@ -5,7 +5,7 @@ An embeddable, single-file teaching simulator for the Rad-Lad website. It's the 
 real, normal **PA and lateral chest pair from one patient** (CC0, see `CREDITS.md`). Your set-up is then simulated
 onto them in the browser.
 
-Marker: **Get It Off Your Chest**. You earn it when both views score 45/50 or more on the first exposure, with no
+Marker: **Bread and Butter**. You earn it when both views score 45/50 or more on the first exposure, with no
 repeats.
 
 ## Flow
